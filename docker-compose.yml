@@ -1,0 +1,39 @@
+version: "3.8"
+
+services:
+  mlflow:
+    image: python:3.11-slim
+    container_name: automl_mlflow
+    working_dir: /mlflow
+    command: >
+      bash -c "pip install mlflow==2.20.3 && mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root /mlflow/artifacts"
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    networks:
+      - automl_net
+
+  streamlit:
+    build: .
+    container_name: automl_streamlit
+    ports:
+      - "8501:8501"
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_EXPERIMENT_NAME=AutoML_Experiment
+    volumes:
+      - ./uploads:/app/uploads
+      - ./exports:/app/exports
+    depends_on:
+      - mlflow
+    networks:
+      - automl_net
+
+volumes:
+  mlflow_data:
+
+
+networks:
+  automl_net:
+    driver: bridge

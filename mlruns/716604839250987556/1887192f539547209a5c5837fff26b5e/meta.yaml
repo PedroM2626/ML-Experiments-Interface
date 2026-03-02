@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/pedro/.gemini/antigravity/playground/midnight-hawking/mlruns/716604839250987556/1887192f539547209a5c5837fff26b5e/artifacts
+end_time: 1772492115146
+entry_point_name: ''
+experiment_id: '716604839250987556'
+lifecycle_stage: active
+run_id: 1887192f539547209a5c5837fff26b5e
+run_name: P1 — GradientBoosting
+run_uuid: 1887192f539547209a5c5837fff26b5e
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1772492114032
+status: 3
+tags: []
+user_id: pedro
