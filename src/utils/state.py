@@ -17,6 +17,10 @@ def init_state():
         "dataset_name": "",
         "target_column": None,
         "task_type": "classification",
+        # Time Series
+        "date_column": "",
+        "horizon": 12,
+        "freq": "M",
         # Config
         "test_size": 0.1,
         "n_folds": 3,
@@ -24,7 +28,9 @@ def init_state():
         "n_estimators_per_algo": 2,
         "hpo_trials": 10,
         "optimization_metric": "roc_auc",
-        # Training state
+        # Multi-experiment manager
+        "active_experiment_id": None,
+        # Legacy single-experiment training state (kept for backward compat)
         "is_training": False,
         "training_done": False,
         "event_queue": None,
@@ -33,9 +39,9 @@ def init_state():
         # Progress
         "completed_stages": [],
         "current_stage": "",
-        "pipelines_state": [],           # [{pipeline_id, algorithm, color, nodes_done}]
-        "results": [],                   # list of result dicts
-        "logs": [],                      # list of log strings
+        "pipelines_state": [],
+        "results": [],
+        "logs": [],
         "best_result": None,
         "elapsed_start": None,
         # UI

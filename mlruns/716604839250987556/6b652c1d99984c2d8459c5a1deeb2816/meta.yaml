@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/pedro/.gemini/antigravity/playground/midnight-hawking/mlruns/716604839250987556/6b652c1d99984c2d8459c5a1deeb2816/artifacts
+end_time: 1772494434350
+entry_point_name: ''
+experiment_id: '716604839250987556'
+lifecycle_stage: active
+run_id: 6b652c1d99984c2d8459c5a1deeb2816
+run_name: '[Summary] air_passengers.csv'
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1772494434009
+status: 3
+tags: []
+user_id: pedro

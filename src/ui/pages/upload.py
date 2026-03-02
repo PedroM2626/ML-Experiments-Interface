@@ -4,6 +4,7 @@ Upload page — dataset upload, profiling, and training configuration.
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 import io
 import os
 from src.utils import state
@@ -22,7 +23,7 @@ def render():
             <span style="font-size:48px;">🤖</span>
             <div style="text-align:left;">
                 <h1 style="margin:0;font-size:34px;font-weight:900;background:linear-gradient(135deg,#8B5CF6,#06B6D4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">AutoML Studio</h1>
-                <p style="margin:0;color:#64748b;font-size:14px;">Automated Machine Learning · Watson AutoAI style</p>
+                <p style="margin:0;color:#64748b;font-size:14px;">Automated Machine Learning · Azure ML · SageMaker · Vertex AI · WatsonX style</p>
             </div>
         </div>
     </div>
@@ -58,36 +59,52 @@ def render():
 
         # Sample dataset shortcuts
         st.markdown("<p style='color:#64748b;font-size:12px;margin-top:8px;'>Or try a sample dataset:</p>", unsafe_allow_html=True)
-        sample_cols = st.columns(3)
+        sample_cols = st.columns(4)
         if sample_cols[0].button("🌸 Iris", use_container_width=True):
             from sklearn.datasets import load_iris
             iris = load_iris(as_frame=True)
-            df = iris.frame
+            df = iris.frame.copy()
             df["target"] = iris.target_names[iris.target]
-            state.set("df", df)
-            state.set("dataset_name", "iris.csv")
-            state.set("target_column", "target")
-            st.rerun()
+            state.set("df", df); state.set("dataset_name", "iris.csv")
+            state.set("target_column", "target"); st.rerun()
 
         if sample_cols[1].button("🚢 Titanic", use_container_width=True):
             url = "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv"
             try:
                 df = pd.read_csv(url)
-                state.set("df", df)
-                state.set("dataset_name", "titanic.csv")
-                state.set("target_column", "Survived")
-                st.rerun()
+                state.set("df", df); state.set("dataset_name", "titanic.csv")
+                state.set("target_column", "Survived"); st.rerun()
             except Exception:
-                st.warning("Could not load Titanic dataset (check internet).")
+                st.warning("Could not load Titanic dataset.")
 
-        if sample_cols[2].button("🏠 Boston", use_container_width=True):
+        if sample_cols[2].button("🏠 Housing", use_container_width=True):
             from sklearn.datasets import fetch_california_housing
             housing = fetch_california_housing(as_frame=True)
             df = housing.frame
-            state.set("df", df)
-            state.set("dataset_name", "california_housing.csv")
-            state.set("target_column", "MedHouseVal")
-            st.rerun()
+            state.set("df", df); state.set("dataset_name", "california_housing.csv")
+            state.set("target_column", "MedHouseVal"); st.rerun()
+
+        if sample_cols[3].button("📈 Air Passengers", use_container_width=True):
+            # Classic monthly airline passengers time series
+            import io, urllib.request
+            url = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/airline-passengers.csv"
+            try:
+                df = pd.read_csv(url, header=0, names=["Month", "Passengers"])
+                state.set("df", df); state.set("dataset_name", "air_passengers.csv")
+                state.set("target_column", "Passengers")
+                state.set("task_type", "time_series")
+                state.set("date_column", "Month"); st.rerun()
+            except Exception:
+                # Fallback: generate synthetic TS
+                dates = pd.date_range("2010-01-01", periods=120, freq="MS")
+                vals = (100 + np.arange(120) * 0.5
+                        + 20 * np.sin(2 * np.pi * np.arange(120) / 12)
+                        + np.random.normal(0, 5, 120))
+                df = pd.DataFrame({"Date": dates.strftime("%Y-%m-%d"), "Value": vals.round(1)})
+                state.set("df", df); state.set("dataset_name", "synthetic_ts.csv")
+                state.set("target_column", "Value")
+                state.set("task_type", "time_series")
+                state.set("date_column", "Date"); st.rerun()
 
         # Dataset preview & profile
         if df is not None:
@@ -104,35 +121,76 @@ def render():
             st.info("👈 Upload a dataset first to configure the experiment.")
             return
 
+        # Experiment name
+        exp_name = st.text_input(
+            "🏷️ Experiment name",
+            value=state.get("dataset_name", "Experiment").replace(".csv", "").replace(".xlsx", ""),
+        )
+
         # Target column
         target = st.selectbox(
             "🎯 Prediction column (target)",
             options=df.columns.tolist(),
-            index=df.columns.tolist().index(state.get("target_column")) if state.get("target_column") in df.columns else 0,
+            index=df.columns.tolist().index(state.get("target_column"))
+            if state.get("target_column") in df.columns else 0,
         )
         state.set("target_column", target)
 
-        # Auto-infer task type
+        # Task type (now includes time_series)
         inferred_task = infer_task_type(df[target])
+        task_opts = ["classification", "regression", "time_series"]
+        cur_task = state.get("task_type", inferred_task)
+        if cur_task not in task_opts:
+            cur_task = inferred_task
         task_type = st.radio(
             "🔰 Task type",
-            options=["classification", "regression"],
-            index=0 if inferred_task == "classification" else 1,
+            options=task_opts,
+            index=task_opts.index(cur_task),
             horizontal=True,
         )
         state.set("task_type", task_type)
+
+        # ── Time Series specific settings ──────────────────────────────────────
+        if task_type == "time_series":
+            st.markdown("<div style='background:#0f1929;border-left:3px solid #8B5CF6;padding:10px 14px;border-radius:6px;margin:8px 0;'>"
+                        "<span style='color:#a78bfa;font-weight:600;font-size:12px;'>📅 Time Series Configuration</span></div>",
+                        unsafe_allow_html=True)
+
+            date_cols = ["(none)"] + df.columns.tolist()
+            cur_date_col = state.get("date_column", "(none)")
+            date_col_idx = date_cols.index(cur_date_col) if cur_date_col in date_cols else 0
+            date_col = st.selectbox("📅 Date/Time column", date_cols, index=date_col_idx)
+            state.set("date_column", date_col if date_col != "(none)" else "")
+
+            freq_opts = {"Daily (D)": "D", "Weekly (W)": "W", "Monthly (M)": "M",
+                         "Quarterly (Q)": "Q", "Hourly (H)": "H"}
+            freq_label = st.selectbox("📡 Frequency", list(freq_opts.keys()), index=2)
+            state.set("freq", freq_opts[freq_label])
+
+            horizon = st.slider("🔮 Forecast horizon (steps)", 1, 60,
+                                state.get("horizon", 12))
+            state.set("horizon", horizon)
 
         st.divider()
 
         # Optimization metric
         metric_opts = list(OPTIMIZATION_METRICS[task_type].keys())
-        opt_metric_label = st.selectbox("📈 Optimization metric", metric_opts)
+        cur_metric = state.get("optimization_metric", metric_opts[0])
+        # reset metric if task changed
+        if cur_metric not in OPTIMIZATION_METRICS[task_type].values():
+            cur_metric = list(OPTIMIZATION_METRICS[task_type].values())[0]
+        opt_metric_label = st.selectbox("📈 Optimization metric", metric_opts,
+                                        index=metric_opts.index(
+                                            next((k for k, v in OPTIMIZATION_METRICS[task_type].items()
+                                                  if v == cur_metric), metric_opts[0])))
         opt_metric_key = OPTIMIZATION_METRICS[task_type][opt_metric_label]
         state.set("optimization_metric", opt_metric_key)
 
         col_a, col_b = st.columns(2)
         with col_a:
-            test_size = st.slider("📦 Holdout %", 5, 30, int(state.get("test_size", 0.1) * 100), step=5)
+            test_size = st.slider("📦 Holdout %", 5, 30,
+                                  int(state.get("test_size", 0.1) * 100), step=5,
+                                  disabled=(task_type == "time_series"))
             state.set("test_size", test_size / 100)
             n_folds = st.slider("🔄 CV Folds", 2, 10, state.get("n_folds", 3))
             state.set("n_folds", n_folds)
@@ -140,37 +198,98 @@ def render():
         with col_b:
             max_algos = st.slider("🤖 Max algorithms", 2, 8, state.get("max_algorithms", 4))
             state.set("max_algorithms", max_algos)
-            hpo_trials = st.slider("🔬 HPO trials", 5, 30, state.get("hpo_trials", 10))
+            hpo_trials = st.slider("🔬 HPO trials", 3, 30, state.get("hpo_trials", 10))
             state.set("hpo_trials", hpo_trials)
 
         st.divider()
 
         # MLflow settings
         with st.expander("📦 MLflow Tracking"):
-            mlflow_uri = st.text_input(
-                "Tracking URI",
-                value=state.get("mlflow_tracking_uri", "mlruns"),
-            )
+            mlflow_uri = st.text_input("Tracking URI",
+                                       value=state.get("mlflow_tracking_uri", "mlruns"))
             state.set("mlflow_tracking_uri", mlflow_uri)
-            mlflow_exp = st.text_input(
-                "Experiment Name",
-                value=state.get("mlflow_experiment_name", "AutoML_Experiment"),
-            )
+            mlflow_exp = st.text_input("Experiment Name",
+                                       value=state.get("mlflow_experiment_name", "AutoML_Experiment"))
             state.set("mlflow_experiment_name", mlflow_exp)
 
         st.divider()
 
         # Launch button
         can_train = df is not None and target is not None
+        if (task_type == "time_series" and not state.get("date_column")):
+            st.info("💡 Select a date/time column for time series training.")
+            can_train = False
+
         if st.button(
             "🚀 Start AutoML Training",
             use_container_width=True,
             disabled=not can_train,
             type="primary",
         ):
-            state.reset_training_state()
-            state.set("current_page", "training")
-            st.rerun()
+            _launch_experiment(exp_name, df, task_type, target)
+
+
+
+def _launch_experiment(exp_name: str, df, task_type: str, target: str):
+    """Create and start an experiment via ExperimentManager, then navigate."""
+    from src.utils import experiment_manager as em
+    from src.tracking.mlflow_tracker import setup_mlflow
+
+    # Setup MLflow
+    setup_mlflow(
+        tracking_uri=state.get("mlflow_tracking_uri", "mlruns"),
+        experiment_name=state.get("mlflow_experiment_name", "AutoML_Experiment"),
+    )
+
+    if task_type == "time_series":
+        from src.automl.ts_engine import TSEngineConfig
+        config = TSEngineConfig(
+            task_type="time_series",
+            target_column=target,
+            date_column=state.get("date_column", ""),
+            horizon=state.get("horizon", 12),
+            freq=state.get("freq", "M"),
+            n_splits=state.get("n_folds", 5),
+            max_algorithms=state.get("max_algorithms", 4),
+            n_estimators_per_algo=state.get("n_estimators_per_algo", 2),
+            hpo_trials=state.get("hpo_trials", 8),
+            optimization_metric=state.get("optimization_metric", "rmse"),
+        )
+        exp_id = em.create_experiment(
+            name=exp_name or f"TS — {state.get('dataset_name', 'dataset')}",
+            df=df, config=config,
+            dataset_name=state.get("dataset_name", ""),
+            task_type="time_series",
+            target_column=target,
+            optimization_metric=state.get("optimization_metric", "rmse"),
+        )
+        em.start_ts_experiment(exp_id)
+    else:
+        from src.automl.engine import EngineConfig
+        config = EngineConfig(
+            task_type=task_type,
+            target_column=target,
+            test_size=state.get("test_size", 0.1),
+            n_folds=state.get("n_folds", 3),
+            n_estimators_per_algo=state.get("n_estimators_per_algo", 2),
+            max_algorithms=state.get("max_algorithms", 4),
+            hpo_trials=state.get("hpo_trials", 10),
+            optimization_metric=state.get("optimization_metric", "roc_auc"),
+            export_dir="exports",
+        )
+        exp_id = em.create_experiment(
+            name=exp_name or state.get("dataset_name", "Experiment"),
+            df=df, config=config,
+            dataset_name=state.get("dataset_name", ""),
+            task_type=task_type,
+            target_column=target,
+            optimization_metric=state.get("optimization_metric", "roc_auc"),
+        )
+        em.start_experiment(exp_id)
+
+    state.set("active_experiment_id", exp_id)
+    state.set("current_page", "experiments")
+    st.rerun()
 
 
 def _render_profile_badges(df: pd.DataFrame, target: str = None):

@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/pedro/.gemini/antigravity/playground/midnight-hawking/mlruns/716604839250987556/f573489637124bcbb9cb01e2cd3cf27e/artifacts
+end_time: 1772494416166
+entry_point_name: ''
+experiment_id: '716604839250987556'
+lifecycle_stage: active
+run_id: f573489637124bcbb9cb01e2cd3cf27e
+run_name: P2 — XGBoost [AirPass-TS]
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1772494415477
+status: 3
+tags: []
+user_id: pedro

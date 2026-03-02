@@ -41,6 +41,12 @@ OPTIMIZATION_METRICS = {
         "RMSE": "neg_mse",
         "MAE": "neg_mae",
     },
+    "time_series": {
+        "RMSE": "rmse",
+        "MAE": "mae",
+        "MAPE (%)": "mape",
+        "R²": "r2",
+    },
 }
 
 

@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/pedro/.gemini/antigravity/playground/midnight-hawking/mlruns/716604839250987556/84fb58ee8cb34b9bbf7b6f005f34a92c/artifacts
+end_time: 1772494433212
+entry_point_name: ''
+experiment_id: '716604839250987556'
+lifecycle_stage: active
+run_id: 84fb58ee8cb34b9bbf7b6f005f34a92c
+run_name: P7 — RandomForest [AirPass-TS]
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1772494431180
+status: 3
+tags: []
+user_id: pedro
