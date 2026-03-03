@@ -52,9 +52,16 @@ OPTIMIZATION_METRICS = {
 }
 
 
-def get_cv_splitter(task_type: str, n_folds: int):
-    if task_type == "classification":
-        return StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
+def get_cv_splitter(task_type: str, n_folds: int, y: Optional[pd.Series] = None):
+    if task_type == "classification" and y is not None:
+        try:
+            counts = y.value_counts()
+            if counts.min() < 2:
+                # Stratification impossible with only 1 member in a class
+                return KFold(n_splits=n_folds, shuffle=True, random_state=42)
+            return StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
+        except Exception:
+            return KFold(n_splits=n_folds, shuffle=True, random_state=42)
     return KFold(n_splits=n_folds, shuffle=True, random_state=42)
 
 
@@ -66,7 +73,7 @@ def run_cross_validation(
     n_folds: int = 5,
 ) -> Dict[str, float]:
     """Run cross-validation and return mean metric scores."""
-    cv = get_cv_splitter(task_type, n_folds)
+    cv = get_cv_splitter(task_type, n_folds, y)
     scoring = CV_METRICS_CLASSIFICATION if task_type == "classification" else CV_METRICS_REGRESSION
 
     try:

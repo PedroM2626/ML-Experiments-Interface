@@ -66,14 +66,16 @@ def render():
             df = iris.frame.copy()
             df["target"] = iris.target_names[iris.target]
             state.set("df", df); state.set("dataset_name", "iris.csv")
-            state.set("target_column", "target"); st.rerun()
+            state.set("target_column", "target"); state.set("task_type", "classification")
+            st.rerun()
 
         if sample_cols[1].button("🚢 Titanic", use_container_width=True):
             url = "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv"
             try:
                 df = pd.read_csv(url)
                 state.set("df", df); state.set("dataset_name", "titanic.csv")
-                state.set("target_column", "Survived"); st.rerun()
+                state.set("target_column", "Survived"); state.set("task_type", "classification")
+                st.rerun()
             except Exception:
                 st.warning("Could not load Titanic dataset.")
 
@@ -82,7 +84,8 @@ def render():
             housing = fetch_california_housing(as_frame=True)
             df = housing.frame
             state.set("df", df); state.set("dataset_name", "california_housing.csv")
-            state.set("target_column", "MedHouseVal"); st.rerun()
+            state.set("target_column", "MedHouseVal"); state.set("task_type", "regression")
+            st.rerun()
 
         if sample_cols[3].button("📈 Air Passengers", use_container_width=True):
             # Classic monthly airline passengers time series

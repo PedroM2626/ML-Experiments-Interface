@@ -12,7 +12,7 @@ import streamlit as st
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 import json
-from ..db.experiment_store import upsert_experiment, load_all_experiments, delete_experiment_db
+from src.db.experiment_store import upsert_experiment, load_all_experiments, delete_experiment_db
 
 
 def _now_iso() -> str:

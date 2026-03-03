@@ -40,8 +40,8 @@ from .evaluator import (
 from .pipeline_builder import build_pipeline, get_feature_names_after_preprocessor, get_feature_importance
 from .ensemble import build_stacking_ensemble
 from .explainer import compute_shap_values
-from ..db.experiment_store import (
-    save_experiment, update_experiment_status, save_pipeline_result
+from src.db.experiment_store import (
+    upsert_experiment, update_experiment_status, save_pipeline_result
 )
 import warnings
 warnings.filterwarnings("ignore")
@@ -166,7 +166,7 @@ class AutoMLEngine:
                 "optimization_metric": cfg.optimization_metric,
                 "config": cfg,
             }
-            save_experiment(exp_data)
+            upsert_experiment(exp_data)
 
             # Stage 1 — read dataset
             self._emit(q, _evt(EventType.STAGE, stage="Read dataset", stage_idx=0))
@@ -182,13 +182,22 @@ class AutoMLEngine:
                 from sklearn.preprocessing import LabelEncoder
                 le = LabelEncoder()
                 y = pd.Series(le.fit_transform(y), name=y.name)
+            # Check if stratification is even possible
+            stratify_y = None
+            if cfg.task_type == "classification":
+                try:
+                    if y.value_counts().min() >= 2:
+                        stratify_y = y
+                except Exception:
+                    pass
+
             X_train, X_test, y_train, y_test = train_test_split(
                 X, y,
                 test_size=cfg.test_size,
                 random_state=cfg.random_state,
-                stratify=y if cfg.task_type == "classification" else None,
+                stratify=stratify_y,
             )
-            self._log(q, f"✂️  Train: {len(X_train)} | Holdout: {len(X_test)} (stratified={cfg.task_type=='classification'})")
+            self._log(q, f"✂️  Train: {len(X_train)} | Holdout: {len(X_test)} (stratified={stratify_y is not None})")
 
             # Check for imbalance
             is_imbalanced, ratio = (False, 1.0)

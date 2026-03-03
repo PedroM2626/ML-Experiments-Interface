@@ -73,7 +73,7 @@ def init_db():
 
 # ── Experiments ────────────────────────────────────────────────────────────────
 
-def save_experiment(exp: Dict):
+def upsert_experiment(exp: Dict):
     """Insert or replace experiment record."""
     with _lock:
         conn = _get_conn()
@@ -170,7 +170,7 @@ def save_pipeline_result(exp_id: str, result: Dict):
             conn.close()
 
 
-def delete_experiment(exp_id: str):
+def delete_experiment_db(exp_id: str):
     """Delete experiment and its pipelines."""
     with _lock:
         conn = _get_conn()
