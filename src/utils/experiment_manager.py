@@ -11,6 +11,8 @@ import threading
 import streamlit as st
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
+import json
+from ..db.experiment_store import upsert_experiment, load_all_experiments, delete_experiment_db
 
 
 def _now_iso() -> str:
@@ -22,9 +24,11 @@ _STATE_KEY = "_automl_experiments"
 
 
 def _get_store() -> Dict[str, Dict]:
-    """Return the global experiment store from session state."""
+    """Return the global experiment store from session state, initialized from DB if empty."""
     if _STATE_KEY not in st.session_state:
-        st.session_state[_STATE_KEY] = {}
+        # Load from SQLite
+        db_exps = load_all_experiments()
+        st.session_state[_STATE_KEY] = {e["id"]: e for e in db_exps}
     return st.session_state[_STATE_KEY]
 
 
@@ -51,7 +55,7 @@ def create_experiment(
     """Create a new experiment entry and return its ID."""
     store = _get_store()
     exp_id = f"exp_{uuid.uuid4().hex[:8]}"
-    store[exp_id] = {
+    exp = {
         "id": exp_id,
         "name": name,
         "status": ExpStatus.PENDING,
@@ -80,6 +84,11 @@ def create_experiment(
         "n_pipelines_done": 0,
         "error": None,
     }
+    store[exp_id] = exp
+    try:
+        upsert_experiment(exp)
+    except Exception:
+        pass
     return exp_id
 
 
@@ -146,12 +155,20 @@ def stop_experiment(exp_id: str):
     if exp:
         exp["status"] = ExpStatus.STOPPED
         exp["finished_at"] = _now_iso()
+        try:
+            upsert_experiment(exp)
+        except Exception:
+            pass
 
 
 def delete_experiment(exp_id: str):
-    """Remove experiment from store."""
+    """Remove experiment from store and DB."""
     store = _get_store()
     store.pop(exp_id, None)
+    try:
+        delete_experiment_db(exp_id)
+    except Exception:
+        pass
 
 
 def get_experiment(exp_id: str) -> Optional[Dict]:
@@ -285,6 +302,15 @@ def _handle_event(exp: Dict, evt: Dict):
         exp["finished_at"] = _now_iso()
         ts = time.strftime("%H:%M:%S")
         exp["logs"].append(f"[{ts}] 💥 ERROR: {exp['error']}")
+    
+    # Persist to DB periodically or on completion
+    if etype in (EventType.DONE, EventType.ERROR, EventType.PIPELINE_DONE, EventType.STAGE):
+        try:
+            # We don't save the full 'df' to SQLite (too big), only metadata
+            # experiment_store.py handles skipping large fields usually
+            upsert_experiment(exp)
+        except Exception:
+            pass
 
 
 def _update_nodes(exp: Dict, pipeline_id: str, nodes_done: int):

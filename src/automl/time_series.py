@@ -8,6 +8,7 @@ import pandas as pd
 from typing import Dict, List, Optional, Tuple, Any
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.base import BaseEstimator, RegressorMixin
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -188,7 +189,7 @@ def run_ts_cross_validation(
             continue
 
     def _mean(lst):
-        return float(np.mean(lst)) if lst else np.nan
+        return float(np.mean([x for x in lst if not np.isnan(x)])) if lst else np.nan
 
     return {
         "rmse": round(_mean(all_rmse), 6),
@@ -199,21 +200,87 @@ def run_ts_cross_validation(
     }
 
 
-def get_ts_primary_metric(scores: Dict[str, float], metric_key: str) -> float:
-    """For TS, lower RMSE/MAE/MAPE = better; higher R²/DA = better."""
-    val = scores.get(metric_key, float("nan"))
-    if np.isnan(val):
-        return 0.0
-    # Negate error metrics so that "higher = better" sorting works everywhere
-    if metric_key in ("rmse", "mae", "mape"):
-        return -val
-    return val
+def run_ts_expanding_window_cv(
+    pipeline,
+    X: pd.DataFrame,
+    y: pd.Series,
+    initial_train_size: float = 0.5,
+    step_size: float = 0.1,
+    optimization_metric: str = "rmse",
+) -> Dict[str, float]:
+    """Expanding window CV: more robust for long time series."""
+    n = len(X)
+    start = int(n * initial_train_size)
+    step = int(n * step_size) or 1
+
+    all_rmse, all_mae, all_mape, all_r2 = [], [], [], []
+
+    for end in range(start, n - 1, step):
+        # Validation window is next 'step' points
+        val_end = min(end + step, n)
+        X_train_cv, X_val_cv = X.iloc[:end], X.iloc[end:val_end]
+        y_train_cv, y_val_cv = y.iloc[:end], y.iloc[end:val_end]
+
+        if len(y_val_cv) == 0:
+            break
+
+        try:
+            pipeline.fit(X_train_cv, y_train_cv)
+            y_pred = pipeline.predict(X_val_cv)
+
+            all_rmse.append(float(np.sqrt(mean_squared_error(y_val_cv, y_pred))))
+            all_mae.append(float(mean_absolute_error(y_val_cv, y_pred)))
+            all_mape.append(mape(y_val_cv.values, y_pred))
+
+            from sklearn.metrics import r2_score
+            all_r2.append(float(r2_score(y_val_cv, y_pred)))
+        except Exception:
+            continue
+
+    def _mean(lst):
+        return float(np.mean([x for x in lst if not np.isnan(x)])) if lst else np.nan
+
+    return {
+        "rmse": round(_mean(all_rmse), 6),
+        "mae": round(_mean(all_mae), 6),
+        "mape": round(_mean(all_mape), 6),
+        "r2": round(_mean(all_r2), 6),
+    }
 
 
-# ── TS-Compatible Algorithm Registry ─────────────────────────────────────────
+# ── ARIMA Wrapper ─────────────────────────────────────────────────────────────
+
+class ArimaForecaster(BaseEstimator, RegressorMixin):
+    """Scikit-learn compatible wrapper for statsmodels ARIMA."""
+    def __init__(self, p=1, d=0, q=1, seasonal_p=0, seasonal_d=0, seasonal_q=0, s=0):
+        self.p = p
+        self.d = d
+        self.q = q
+        self.seasonal_p = seasonal_p
+        self.seasonal_d = seasonal_d
+        self.seasonal_q = seasonal_q
+        self.s = s
+        self.model_res_ = None
+
+    def fit(self, X, y):
+        from statsmodels.tsa.arima.model import ARIMA
+        order = (int(self.p), int(self.d), int(self.q))
+        seasonal_order = (int(self.seasonal_p), int(self.seasonal_d), int(self.seasonal_q), int(self.s)) if self.s > 0 else (0,0,0,0)
+
+        # X is ignored in univariate ARIMA if not exogenous
+        model = ARIMA(y, order=order, seasonal_order=seasonal_order, enforce_stationarity=False, enforce_invertibility=False)
+        self.model_res_ = model.fit()
+        return self
+
+    def predict(self, X):
+        if self.model_res_ is None:
+            return np.zeros(len(X))
+        # Returns out-of-sample forecast
+        return self.model_res_.forecast(steps=len(X)).values
+
 
 def get_ts_algorithm_registry():
-    """Returns forecasting-compatible regressors (no time leakage)."""
+    """Returns forecasting-compatible regressors."""
     from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor, ExtraTreesRegressor
     from sklearn.linear_model import Ridge, ElasticNet
     from xgboost import XGBRegressor
@@ -227,6 +294,7 @@ def get_ts_algorithm_registry():
         "ExtraTrees": ExtraTreesRegressor,
         "Ridge": Ridge,
         "ElasticNet": ElasticNet,
+        "ARIMA": ArimaForecaster,
     }
     return registry
 
@@ -239,13 +307,22 @@ def instantiate_ts_model(algo_name: str, params: Optional[Dict] = None):
         return Ridge()
     params = params or {}
     try:
-        # Remove params not accepted by the model
         import inspect
         valid = set(inspect.signature(cls.__init__).parameters.keys()) - {"self"}
         accepted = {k: v for k, v in params.items() if k in valid}
         return cls(**accepted)
     except Exception:
         return cls()
+
+
+def get_ts_primary_metric(scores: Dict[str, float], metric_key: str) -> float:
+    """For TS, lower RMSE/MAE/MAPE = better; higher R² = better."""
+    val = scores.get(metric_key, float("nan"))
+    if np.isnan(val):
+        return 0.0
+    if metric_key in ("rmse", "mae", "mape"):
+        return -val
+    return val
 
 
 TS_ALGORITHM_COLORS = {
@@ -256,6 +333,7 @@ TS_ALGORITHM_COLORS = {
     "ExtraTrees": "#06B6D4",
     "Ridge": "#F59E0B",
     "ElasticNet": "#EC4899",
+    "ARIMA": "#8B5CF6",
 }
 
 
@@ -268,21 +346,11 @@ def generate_forecast(
     horizon: int,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Multi-step ahead forecast using recursive strategy.
-    Returns (forecast_values, lower_ci, upper_ci).
+    Multi-step ahead forecast using proxy.
     """
-    from sklearn.pipeline import Pipeline
-
-    # Fit on all data
     best_pipeline.fit(X_history, y_history)
-
-    # Use the last row as the starting point
-    # The model already learned the pattern; recursive not easily generalizable
-    # We return predictions on the last |horizon| training points as a proxy
-    # In production you'd do recursive multi-step prediction
     last_preds = best_pipeline.predict(X_history.tail(horizon))
 
-    # Simple confidence interval: ±1.96*std of residuals
     y_pred_all = best_pipeline.predict(X_history)
     residuals = y_history.values - y_pred_all
     std = np.std(residuals)

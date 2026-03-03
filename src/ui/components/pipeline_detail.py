@@ -6,7 +6,14 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Any
+from .shap_charts import render_shap_summary, render_shap_waterfall
+from .eval_charts import (
+    render_calibration_curve, 
+    render_residuals_plot, 
+    render_learning_curve, 
+    render_per_class_metrics
+)
 
 
 def render_pipeline_detail(result: Dict, task_type: str = "classification"):
@@ -29,10 +36,53 @@ def render_pipeline_detail(result: Dict, task_type: str = "classification"):
 
     with col1:
         _render_feature_importance(result)
+        
+        # --- Advanced Evaluation Charts ---
+        st.divider()
+        if task_type == "classification":
+            cal_data = result.get("calibration_data")
+            if cal_data:
+                st.markdown("**🎯 Calibration Curve**")
+                render_calibration_curve(*cal_data)
+            
+        elif task_type == "regression":
+            res_data = result.get("residuals_data")
+            if res_data:
+                st.markdown("**📉 Residuals Analysis**")
+                render_residuals_plot(*res_data)
+
+        lc_data = result.get("learning_curve_data")
+        if lc_data:
+            st.markdown("**📈 Learning Curve**")
+            render_learning_curve(*lc_data)
 
     with col2:
         _render_metrics_table(result, task_type)
         _render_hyperparams(result)
+        
+        # --- SHAP Explanations ---
+        st.divider()
+        st.markdown("**✨ Model Explainability (SHAP)**")
+        
+        shap_values = result.get("shap_values")
+        feature_names = result.get("feature_names")
+        base_value = result.get("shap_base_value", 0.0)
+        
+        if shap_values is not None and feature_names is not None:
+            tab_global, tab_local = st.tabs(["Global Importance", "Local Explanation"])
+            
+            with tab_global:
+                render_shap_summary(shap_values, feature_names)
+                st.caption("SHAP values distribution showing feature impact on model output.")
+            
+            with tab_local:
+                st.markdown("###### Local Explanation (Waterfall)")
+                # Sample selection
+                idx = st.slider("Select sample index", 0, len(shap_values)-1, 0, key=f"shap_idx_{pid}")
+                render_shap_waterfall(shap_values[idx], feature_names, float(base_value))
+                st.caption(f"Detailed breakdown for sample {idx}.")
+        else:
+            st.info("SHAP values not available. Ensure 'Explainability' was enabled.")
 
 
 def _render_feature_importance(result: Dict):

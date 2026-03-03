@@ -12,7 +12,7 @@ import streamlit as st
 from src.utils import state
 from src.utils import experiment_manager as em
 from src.utils.experiment_manager import ExpStatus
-from src.ui.pages import upload, training, results
+from src.ui.pages import upload, training, results, predict
 from src.ui.pages import experiments
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -82,6 +82,7 @@ def render_sidebar():
             ("upload",      "📁 Dataset & Config"),
             ("experiments", f"🧪 Experiments{exp_badge}"),
             ("results",     "📈 Results"),
+            ("predict",     "🔮 Predict"),
         ]
 
         for page_key, label in nav_items:
@@ -159,6 +160,8 @@ def main():
         training.render()
     elif page == "results":
         results.render()
+    elif page == "predict":
+        predict.render()
     else:
         upload.render()
 

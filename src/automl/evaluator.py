@@ -11,7 +11,9 @@ from sklearn.metrics import (
     confusion_matrix,
 )
 from sklearn.pipeline import Pipeline
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
+from sklearn.calibration import calibration_curve
+from sklearn.model_selection import learning_curve as sk_learning_curve
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -131,6 +133,7 @@ def get_confusion_matrix(pipeline: Pipeline, X_test, y_test) -> Optional[np.ndar
         return None
 
 
+
 def get_primary_metric(scores: Dict[str, float], task_type: str, metric_key: str) -> float:
     """Extract the primary optimization metric from a score dict."""
     if task_type == "classification":
@@ -141,3 +144,67 @@ def get_primary_metric(scores: Dict[str, float], task_type: str, metric_key: str
         if metric_key in ("neg_mse", "neg_mae"):
             return -val if val > 0 else val
         return val
+
+
+# ── Phase 3: Advanced Evaluation ──────────────────────────────────────────────
+
+def compute_calibration_data(pipeline, X_holdout, y_holdout, n_bins: int = 10):
+    """Compute calibration curve data. Returns (fop, mpv) or (None, None)."""
+    try:
+        if not hasattr(pipeline, "predict_proba"):
+            return None, None
+        proba = pipeline.predict_proba(X_holdout)
+        if proba.shape[1] == 2:
+            y_prob = proba[:, 1]
+        else:
+            return None, None
+        fop, mpv = calibration_curve(y_holdout, y_prob, n_bins=n_bins)
+        return fop.tolist(), mpv.tolist()
+    except Exception:
+        return None, None
+
+
+def compute_learning_curve_data(
+    pipeline, X, y, task_type: str = "classification", n_splits: int = 3
+):
+    """Compute learning curve data. Returns (sizes, tr_m, tr_s, val_m, val_s)."""
+    try:
+        scoring = "roc_auc" if task_type == "classification" else "r2"
+        cv = get_cv_splitter(task_type, n_splits)
+        ts, tr_scores, val_scores = sk_learning_curve(
+            pipeline, X, y, train_sizes=[0.2, 0.4, 0.6, 0.8, 1.0],
+            cv=cv, scoring=scoring, n_jobs=1,
+        )
+        return (
+            ts.tolist(),
+            np.mean(tr_scores, axis=1).tolist(),
+            np.std(tr_scores, axis=1).tolist(),
+            np.mean(val_scores, axis=1).tolist(),
+            np.std(val_scores, axis=1).tolist(),
+        )
+    except Exception:
+        return None, None, None, None, None
+
+
+def compute_residuals(pipeline, X_holdout, y_holdout):
+    """Returns (y_pred, residuals) or (None, None)."""
+    try:
+        y_pred = pipeline.predict(X_holdout)
+        residuals = np.array(y_holdout) - y_pred
+        return y_pred.tolist(), residuals.tolist()
+    except Exception:
+        return None, None
+
+
+def check_imbalance(y) -> Tuple[bool, float]:
+    """Returns (is_imbalanced, minority_ratio)."""
+    try:
+        from collections import Counter
+        counts = Counter(y)
+        if len(counts) < 2:
+            return False, 1.0
+        vals = sorted(counts.values())
+        ratio = vals[0] / vals[-1]
+        return ratio < 0.3, round(ratio, 4)
+    except Exception:
+        return False, 1.0

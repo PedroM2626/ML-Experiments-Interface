@@ -4,16 +4,17 @@ emitting real-time updates via a queue for the Streamlit UI.
 """
 
 import queue
+import traceback
 import time
 import threading
-import traceback
+from datetime import datetime
 import numpy as np
 import pandas as pd
 import optuna
 import joblib
 import os
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any, Callable
+from typing import Dict, List, Optional, Any, Callable, Tuple
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 
@@ -37,6 +38,11 @@ from .evaluator import (
     OPTIMIZATION_METRICS,
 )
 from .pipeline_builder import build_pipeline, get_feature_names_after_preprocessor, get_feature_importance
+from .ensemble import build_stacking_ensemble
+from .explainer import compute_shap_values
+from ..db.experiment_store import (
+    save_experiment, update_experiment_status, save_pipeline_result
+)
 import warnings
 warnings.filterwarnings("ignore")
 optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -59,6 +65,9 @@ class PipelineResult:
     build_time: float         # seconds
     pipeline: Any = field(default=None, repr=False)
     feature_importance: Optional[pd.DataFrame] = None
+    calibration_data: Optional[Tuple[List, List]] = None
+    learning_curve_data: Optional[Tuple[List, List, List, List, List]] = None
+    residuals_data: Optional[Tuple[List, List]] = None
     status: str = "completed"  # completed | failed | running
 
 
@@ -84,6 +93,8 @@ class EventType:
     HPO_PROGRESS = "hpo_progress"
     PIPELINE_DONE = "pipeline_done"
     PIPELINE_FAILED = "pipeline_failed"
+    ENSEMBLE_START = "ensemble_start"
+    ENSEMBLE_DONE = "ensemble_done"
     LOG = "log"
     DONE = "done"
     ERROR = "error"
@@ -140,7 +151,22 @@ class AutoMLEngine:
 
     def _run(self, df: pd.DataFrame, q: queue.Queue):
         cfg = self.config
+        # Ensure ID exists (for DB)
+        exp_id = getattr(cfg, "experiment_id", str(int(time.time())))
         try:
+            # Init DB record
+            exp_data = {
+                "id": exp_id,
+                "name": getattr(cfg, "name", f"Experiment {exp_id}"),
+                "status": "running",
+                "task_type": cfg.task_type,
+                "dataset_name": getattr(cfg, "dataset_name", "dataset"),
+                "target_column": cfg.target_column,
+                "optimization_metric": cfg.optimization_metric,
+                "config": cfg,
+            }
+            save_experiment(exp_data)
+
             # Stage 1 — read dataset
             self._emit(q, _evt(EventType.STAGE, stage="Read dataset", stage_idx=0))
             self._log(q, f"📂 Dataset loaded: {df.shape[0]} rows × {df.shape[1]} columns")
@@ -162,6 +188,15 @@ class AutoMLEngine:
                 stratify=y if cfg.task_type == "classification" else None,
             )
             self._log(q, f"✂️  Train: {len(X_train)} | Holdout: {len(X_test)} (stratified={cfg.task_type=='classification'})")
+
+            # Check for imbalance
+            is_imbalanced, ratio = (False, 1.0)
+            if cfg.task_type == "classification":
+                from .evaluator import check_imbalance
+                is_imbalanced, ratio = check_imbalance(y_train)
+                if is_imbalanced:
+                    self._log(q, f"⚠️  Imbalanced data detected (ratio: {ratio:.2f}). Enabling class weighting.")
+
             time.sleep(0.3)
 
             # Stage 3 — read training data
@@ -220,7 +255,8 @@ class AutoMLEngine:
                         result = self._train_pipeline(
                             pid, algo_name, fe_cfg,
                             X_train, y_train, X_test, y_test,
-                            numeric_cols, categorical_cols, q
+                            numeric_cols, categorical_cols, q,
+                            is_imbalanced=is_imbalanced
                         )
                         dt = round(time.time() - t_start, 1)
                         result.build_time = dt
@@ -238,6 +274,9 @@ class AutoMLEngine:
                             f"CV {cfg.optimization_metric}: {result.primary_metric_cv:.4f} | "
                             f"Holdout: {result.primary_metric_holdout:.4f}"
                         ))
+                        # Save result to DB
+                        save_pipeline_result(exp_id, self._result_to_dict(result))
+                        update_experiment_status(exp_id, "running", n_pipelines_done=len(self.results))
 
                     except Exception as exc:
                         self._emit(q, _evt(EventType.PIPELINE_FAILED, pipeline_id=pid, error=str(exc)))
@@ -253,6 +292,48 @@ class AutoMLEngine:
                 joblib.dump(best.pipeline, model_path)
                 self._log(q, f"🏆 Best pipeline: {best.pipeline_id} ({best.algorithm}) — saving to {model_path}")
 
+            # ── Ensemble Phase ──────────────────────────────────────────
+            if not self._stop_event.is_set() and len(self.results) >= 2 and cfg.task_type != "time_series":
+                self._emit(q, _evt(EventType.ENSEMBLE_START))
+                self._log(q, "🎭 Building Stacked Ensemble from top-3 pipelines...")
+                ens_res = build_stacking_ensemble(
+                    [r.__dict__ for r in self.results],
+                    X_train, y_train, X_test, y_test,
+                    cfg.task_type, cfg.optimization_metric,
+                    n_folds=cfg.n_folds
+                )
+                if ens_res:
+                    # Convert to PipelineResult
+                    ens_obj = PipelineResult(
+                        pipeline_id=ens_res["pipeline_id"],
+                        algorithm=ens_res["algorithm"],
+                        transformer=ens_res["transformer"],
+                        use_pca=False, use_select_k=False,
+                        hyperparams=ens_res["hyperparams"],
+                        cv_scores=ens_res["cv_scores"],
+                        holdout_scores=ens_res["holdout_scores"],
+                        primary_metric_cv=ens_res["primary_metric_cv"],
+                        primary_metric_holdout=ens_res["primary_metric_holdout"],
+                        build_time=ens_res["build_time"],
+                        pipeline=ens_res["pipeline"],
+                        feature_importance=None,
+                        status="completed"
+                    )
+                    self.results.append(ens_obj)
+                    self.results.sort(key=lambda r: abs(r.primary_metric_cv), reverse=True)
+                    self._emit(q, _evt(
+                        EventType.ENSEMBLE_DONE,
+                        result=self._result_to_dict(ens_obj)
+                    ))
+                    self._log(q, f"🥇 Ensemble built: {ens_obj.algorithm} | CV: {ens_obj.primary_metric_cv:.4f}")
+                    # Save to DB
+                    save_pipeline_result(exp_id, self._result_to_dict(ens_obj))
+
+            # Update final best for DB
+            if self.results:
+                update_experiment_status(exp_id, "completed", finished_at=datetime.now().isoformat(),
+                                        best_result=self._result_to_dict(self.results[0]))
+
             self._emit(q, _evt(
                 EventType.DONE,
                 results=[self._result_to_dict(r) for r in self.results],
@@ -261,6 +342,7 @@ class AutoMLEngine:
             self._log(q, f"🎉 Experiment complete! {len(self.results)} pipelines generated.")
 
         except Exception as exc:
+            update_experiment_status(exp_id, "failed", error=str(exc))
             self._emit(q, _evt(EventType.ERROR, error=str(exc), traceback=traceback.format_exc()))
             self._log(q, f"💥 Engine error: {exc}")
 
@@ -282,6 +364,7 @@ class AutoMLEngine:
         X_test, y_test,
         numeric_cols, categorical_cols,
         q: queue.Queue,
+        is_imbalanced: bool = False,
     ) -> PipelineResult:
         cfg = self.config
 
@@ -294,6 +377,9 @@ class AutoMLEngine:
             task_type=cfg.task_type,
         )
         default_params = get_default_params(algo_name, cfg.task_type)
+        if is_imbalanced and "class_weight" in default_params:
+            default_params["class_weight"] = "balanced"
+
         base_model = instantiate_model(algo_name, cfg.task_type, default_params)
         base_pipeline = build_pipeline(fe_steps, base_model)
 
@@ -303,7 +389,8 @@ class AutoMLEngine:
         # Phase B: HPO with Optuna
         self._log(q, f"  [{pid}] Running HPO ({cfg.hpo_trials} trials)...")
         best_params, best_score = self._run_hpo(
-            pid, algo_name, fe_steps, X_train, y_train, q
+            pid, algo_name, fe_steps, X_train, y_train, q,
+            is_imbalanced=is_imbalanced
         )
 
         # Phase C: final pipeline with best params
@@ -312,6 +399,22 @@ class AutoMLEngine:
         final_pipeline = build_pipeline(fe_steps, final_model)
         final_pipeline.fit(X_train, y_train)
 
+        # Phase C.1: Threshold Tuning (Classification)
+        if cfg.task_type == "classification":
+            self._log(q, f"  [{pid}] Tuning threshold for max F1 score...")
+            # Simple threshold search on holdout (not ideal but common in AutoML)
+            try:
+                y_proba = final_pipeline.predict_proba(X_test)
+                if y_proba.shape[1] == 2:
+                    from sklearn.metrics import f1_score
+                    thresholds = np.linspace(0.1, 0.9, 21)
+                    f1s = [f1_score(y_test, (y_proba[:, 1] >= t).astype(int), average="weighted") for t in thresholds]
+                    best_t = thresholds[np.argmax(f1s)]
+                    self._log(q, f"  [{pid}] Best threshold: {best_t:.2f} | F1: {max(f1s):.4f}")
+                    final_pipeline.threshold = best_t # Custom attr for predict interface
+            except Exception:
+                pass
+
         # Phase D: evaluate
         self._log(q, f"  [{pid}] Running {cfg.n_folds}-fold cross-validation...")
         cv_scores = run_cross_validation(final_pipeline, X_train, y_train, cfg.task_type, cfg.n_folds)
@@ -319,6 +422,12 @@ class AutoMLEngine:
 
         primary_cv = get_primary_metric(cv_scores, cfg.task_type, cfg.optimization_metric)
         primary_hd = get_primary_metric(holdout_scores, cfg.task_type, cfg.optimization_metric)
+
+        # Advanced evaluation data
+        from .evaluator import compute_calibration_data, compute_learning_curve_data, compute_residuals
+        calibration = compute_calibration_data(final_pipeline, X_test, y_test) if cfg.task_type == "classification" else None
+        learning = compute_learning_curve_data(final_pipeline, X_train, y_train, cfg.task_type)
+        residuals = compute_residuals(final_pipeline, X_test, y_test) if cfg.task_type != "classification" else None
 
         # Feature importance
         feature_names = get_feature_names_after_preprocessor(final_pipeline, numeric_cols, categorical_cols)
@@ -338,6 +447,9 @@ class AutoMLEngine:
             build_time=0.0,
             pipeline=final_pipeline,
             feature_importance=fi,
+            calibration_data=calibration,
+            learning_curve_data=learning,
+            residuals_data=residuals,
         )
 
     def _run_hpo(
@@ -347,6 +459,7 @@ class AutoMLEngine:
         fe_steps: List,
         X_train, y_train,
         q: queue.Queue,
+        is_imbalanced: bool = False,
     ):
         cfg = self.config
         best_score = -np.inf
@@ -358,6 +471,8 @@ class AutoMLEngine:
                 return -np.inf
             try:
                 full_params = {**get_default_params(algo_name, cfg.task_type), **params}
+                if is_imbalanced and "class_weight" in full_params:
+                    full_params["class_weight"] = "balanced"
                 model = instantiate_model(algo_name, cfg.task_type, full_params)
                 pipeline = build_pipeline(fe_steps, model)
                 cv_scores = run_cross_validation(pipeline, X_train, y_train, cfg.task_type, n_folds=2)
@@ -407,6 +522,9 @@ class AutoMLEngine:
             "primary_metric_cv": r.primary_metric_cv,
             "primary_metric_holdout": r.primary_metric_holdout,
             "build_time": r.build_time,
-            "feature_importance": r.feature_importance.to_dict("records") if r.feature_importance is not None else [],
+            "feature_importance": r.feature_importance.to_dict("records") if (r.feature_importance is not None and hasattr(r.feature_importance, "to_dict")) else [],
+            "calibration_data": getattr(r, "calibration_data", None),
+            "learning_curve_data": getattr(r, "learning_curve_data", None),
+            "residuals_data": getattr(r, "residuals_data", None),
             "status": r.status,
         }

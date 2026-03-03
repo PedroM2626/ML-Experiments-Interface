@@ -49,6 +49,7 @@ REGRESSORS = {
     "LightGBM": LGBMRegressor,
     "Ridge": Ridge,
     "KNeighbors": KNeighborsRegressor,
+    "ARIMA": None, # Handled specially or imported from time_series
 }
 
 if _CATBOOST_AVAILABLE:
@@ -139,9 +140,15 @@ def get_search_space(algo_name: str, trial: optuna.Trial) -> Dict:
 
     elif algo_name == "KNeighbors":
         return {
-            "n_neighbors": trial.suggest_int("n_neighbors", 2, 20),
-            "weights": trial.suggest_categorical("weights", ["uniform", "distance"]),
             "metric": trial.suggest_categorical("metric", ["euclidean", "manhattan"]),
+        }
+
+    elif algo_name == "ARIMA":
+        return {
+            "p": trial.suggest_int("p", 0, 5),
+            "d": trial.suggest_int("d", 0, 2),
+            "q": trial.suggest_int("q", 0, 5),
+            "s": trial.suggest_categorical("s", [0, 7, 12, 24]),
         }
 
     return {}
@@ -161,14 +168,28 @@ def get_default_params(algo_name: str, task_type: str) -> Dict:
         "LogisticRegression": {"C": 1.0, "max_iter": 300, "random_state": 42},
         "Ridge": {"alpha": 1.0},
         "KNeighbors": {"n_neighbors": 5},
+        "ARIMA": {"p": 1, "d": 0, "q": 1, "s": 0},
     }
     return defaults.get(algo_name, {})
 
 
 def instantiate_model(algo_name: str, task_type: str, params: Dict = None):
     """Instantiate an algorithm with given params."""
-    registry = get_algorithm_registry(task_type)
-    cls = registry[algo_name]
+    if algo_name == "ARIMA":
+        from .time_series import ArimaForecaster
+        registry = {"ARIMA": ArimaForecaster}
+    else:
+        registry = get_algorithm_registry(task_type)
+    
+    cls = registry.get(algo_name)
+    if cls is None:
+        # Fallback
+        if task_type == "classification":
+            from sklearn.linear_model import LogisticRegression
+            cls = LogisticRegression
+        else:
+            from sklearn.linear_model import Ridge
+            cls = Ridge
     if params is None:
         params = get_default_params(algo_name, task_type)
     try:
