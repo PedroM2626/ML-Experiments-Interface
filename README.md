@@ -1,7 +1,6 @@
 # AutoML Studio 🤖
 
-Uma plataforma de **Automated Machine Learning** com interface Streamlit, inspirada nas principais plataformas cloud:
-**Azure ML AutoML · AWS SageMaker Canvas · Google Vertex AI AutoML · IBM WatsonX AutoAI**
+AutoML Studio is a professional **Automated Machine Learning** platform built with Streamlit. It is deeply inspired by enterprise solutions such as **IBM WatsonX AutoAI**, Azure ML, and Vertex AI, replicate their core experience of automated pipeline discovery, interactive progress mapping, and professional model evaluation.
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.41%2B-red)
@@ -10,207 +9,101 @@ Uma plataforma de **Automated Machine Learning** com interface Streamlit, inspir
 
 ---
 
-## ✨ Features
+## 🌟 IBM WatsonX AutoAI Inspiration
+This project aims to bridge the gap between open-source AutoML libraries and enterprise cloud platforms. Key inspirations include:
+- **Dynamic Pipeline System**: An animated **Progress Map** that visualizes the data flow through feature engineering, HPO, and model selection nodes, just like in WatsonX.
+- **Automated Stacking**: Automatically combines top-N pipelines into a final stacked ensemble for maximum performance.
+- **Enterprise Reporting**: Professional executive PDF reports and interactive SHAP explainability charts.
 
-### 🤖 AutoML Engine
-- **Classificação, Regressão e Time Series** — detecção automática ou seleção manual
-- Algoritmos: **XGBoost, LightGBM, GradientBoosting, RandomForest, ExtraTrees, SVM, Ridge, ElasticNet**
-- Feature engineering automático (encoding, imputation, scaling, PCA, SelectKBest)
-- **Hyperparameter Optimization** com Optuna (TPE sampler)
-- Cross-validation com múltiplos folds configuráveis
+---
+
+## ✨ Key Features
+
+### 🤖 Intelligent AutoML Engine
+- **Task Detection**: Automatic detection of Classification, Regression, or Time Series tasks.
+- **Auto-Pilot vs. Manual Mode**: Choose between fully autonomous training or manually selecting algorithms and transformers.
+- **Top-Tier Algorithms**: XGBoost, LightGBM, GradientBoosting, RandomForest, ExtraTrees, Ridge, and more.
+- **Advanced Stacking**: Auto-combination of best performers into an ensemble model.
+
+### 🔍 Model Explainability (SHAP)
+- **Global Importance**: Beeswarm and Bar summary charts to understand overall feature impact.
+- **Local Waterfall**: Specific explanations for individual predictions — "Why was this customer classified as X?"
 
 ### ⏱️ Time Series Forecasting
-- Lag features e rolling statistics (sem data leakage)
-- Decomposição temporal: mês, dia, semana, sazonalidade (encoding cíclico sin/cos)
-- **Walk-forward cross-validation** (TimeSeriesSplit)
-- Métricas: RMSE, MAE, MAPE, Directional Accuracy
-- Gráfico interativo **Forecast vs Actuals** com intervalo de confiança 95%
+- **ARIMA & Tree-based Models**: Comprehensive forecasting with specialized algorithms.
+- **Time-Aware CV**: Expanding window and walk-forward cross-validation to prevent data leakage.
+- **Interactive Forecasts**: Visualization of future values with 95% confidence intervals.
 
-### 🔄 Multi-Experimentos Simultâneos
-- Execute **múltiplos experimentos em paralelo** (cada um em thread própria)
-- Status em tempo real: ⚡ Running · ✅ Done · ❌ Failed · ⏹ Stopped
-- Stop/Delete individual por experimento
-- Sidebar com contador de experimentos ativos
+### 📦 Persistence & Tracking
+- **SQLite Persistence**: Experiments and results are saved to a local database (`experiments.db`), surviving app restarts.
+- **MLflow Integration**: Full tracking of metrics, parameters, and artifacts for every pipeline run.
 
-### 📋 Dashboard de Experimentos
-- **Cards Azure ML-style** com status badge, dataset, target, best model
-- Progress Map animado com branches por pipeline
-- Relationship Map (visualização de transformers)
-- Pipeline Leaderboard com comparação de métricas CV vs Holdout
-- Feature Importance interativo
-
-### 📦 Tracking com MLflow
-- Cada pipeline salvo como run no MLflow automaticamente
-- Métricas, hiperparâmetros, artefatos e metadados registrados
-- Experimento separado por dataset/task type
+### 📄 Professional Outputs
+- **Predict Interface**: A dedicated page for manual data entry or CSV batch inference with local SHAP explanations.
+- **Executive PDF Reports**: Generates professional summaries with metrics, top pipelines, and feature importance charts.
 
 ---
 
 ## 🚀 Quick Start
 
-### Opção 1 — Python local
+### Option 1 — Local Python Environment
 
 ```bash
-# Clone o repositório
+# Clone the repository
 git clone <repo-url>
 cd midnight-hawking
 
-# Instale as dependências
+# Install dependencies
 pip install -r requirements.txt
 
-# Inicie o app
+# Run the application
 streamlit run app.py
 ```
 
-Acesse em **http://localhost:8501**
+Access the studio at **http://localhost:8501**
 
-### Opção 2 — Docker
+### Option 2 — Docker (Recommended)
 
 ```bash
 docker compose up --build
 ```
-
-Acesse em **http://localhost:8501**  
-MLflow UI em **http://localhost:5000**
+- **AutoML Studio**: http://localhost:8501
+- **MLflow UI**: http://localhost:5000
 
 ---
 
-## 🗂️ Estrutura do Projeto
+## 🛠️ Technology Stack
+
+| Category | Tools |
+|-----------|------------|
+| **UI** | Streamlit, Plotly, CSS Glassmorphism |
+| **Machine Learning** | scikit-learn, XGBoost, LightGBM, SHAP |
+| **Optimization** | Optuna (TPE Sampler) |
+| **Tracking** | MLflow |
+| **Storage** | SQLite, joblib |
+| **Reporting** | fpdf2, matplotlib |
+| **Infrastructure** | Docker, Python 3.10+ |
+
+---
+
+## 🗂️ Project Structure
 
 ```
 midnight-hawking/
-├── app.py                        # Entrypoint Streamlit
-├── requirements.txt
-├── Dockerfile
-├── docker-compose.yml
-├── .streamlit/
-│   └── config.toml               # Tema dark + fonte Inter
+├── app.py                # Streamlit entry point
 ├── src/
-│   ├── automl/
-│   │   ├── engine.py             # Motor AutoML principal (classif/regression)
-│   │   ├── ts_engine.py          # Motor Time Series
-│   │   ├── time_series.py        # Feature engineering TS + métricas
-│   │   ├── evaluator.py          # CV, métricas por task type
-│   │   ├── hyperopt.py           # Registro de algoritmos + search spaces Optuna
-│   │   ├── pipeline_builder.py   # Construção de sklearn Pipelines
-│   │   └── feature_eng.py        # Préprocessamento e transformações
-│   ├── tracking/
-│   │   └── mlflow_tracker.py     # Setup MLflow + log de runs
-│   ├── ui/
-│   │   ├── pages/
-│   │   │   ├── upload.py         # Dataset upload + configuração
-│   │   │   ├── experiments.py    # Dashboard de experimentos
-│   │   │   ├── training.py       # Visão de treinamento (legado)
-│   │   │   └── results.py        # Resultados finais
-│   │   └── components/
-│   │       ├── progress_map.py   # Grafo animado de progresso
-│   │       ├── relationship_map.py
-│   │       ├── leaderboard.py    # Pipeline Leaderboard
-│   │       ├── forecast_chart.py # Gráfico Forecast vs Actuals
-│   │       └── pipeline_detail.py
-│   └── utils/
-│       ├── experiment_manager.py # Gerenciador multi-experimento
-│       ├── state.py              # Session state Streamlit
-│       └── data_profiler.py      # Profiling de dataset
-├── tests/
-│   ├── test_engine.py            # 18 testes do motor AutoML
-│   └── test_time_series.py       # 18 testes de Time Series
-└── exports/                      # Modelos exportados (.pkl)
+│   ├── automl/           # Core Engines (Regression, Classification, Time Series)
+│   ├── ui/               # Pages & Professional Components
+│   ├── db/               # SQLite Persistence Layer
+│   ├── tracking/         # MLflow Integration
+│   └── utils/            # Report Generation & Managers
+├── exports/              # Saved model artifacts (.pkl)
+├── experiments.db        # Persistent experiment storage
+└── requirements.txt
 ```
-
----
-
-## ⚙️ Configuração
-
-Copie `.env.example` para `.env` e ajuste:
-
-```bash
-cp .env.example .env
-```
-
-```env
-MLFLOW_TRACKING_URI=mlruns
-MLFLOW_EXPERIMENT_NAME=AutoML_Experiment
-```
-
----
-
-## 📊 Datasets de Exemplo
-
-O app inclui 4 datasets prontos no botão "Or try a sample dataset":
-
-| Dataset | Tipo | Uso |
-|---------|------|-----|
-| 🌸 Iris | Classificação | 4 features, 3 classes |
-| 🚢 Titanic | Classificação | sobrevivência, dados mistos |
-| 🏠 California Housing | Regressão | preço de imóveis |
-| 📈 Air Passengers | Time Series | passageiros mensais 1949–1960 |
-
----
-
-## 🧪 Testes
-
-```bash
-# Todos os testes
-python -m pytest tests/ -v
-
-# Só engine tests
-python -m pytest tests/test_engine.py -v
-
-# Só time series tests
-python -m pytest tests/test_time_series.py -v
-```
-
-**36/36 testes passando** (18 engine + 18 time series)
-
----
-
-## 🔍 MLflow UI
-
-Com o app rodando, acesse o MLflow em:
-
-```bash
-mlflow ui --port 5000
-```
-
-Ou via Docker: http://localhost:5000
-
----
-
-## 🐳 Docker
-
-```yaml
-# docker-compose.yml inclui:
-# - automl-studio: app Streamlit na porta 8501
-# - mlflow: tracking server na porta 5000
-```
-
-```bash
-# Build e start
-docker compose up --build
-
-# Só o app
-docker compose up automl-studio
-
-# Stop
-docker compose down
-```
-
----
-
-## 🛠️ Stack Tecnológico
-
-| Categoria | Bibliotecas |
-|-----------|------------|
-| UI | Streamlit 1.41+, Plotly 5.24+ |
-| ML | scikit-learn 1.6+, XGBoost 2.1+, LightGBM 4.6+ |
-| HPO | Optuna 4.2+ |
-| Tracking | MLflow 2.20+ |
-| Data | pandas 2.2+, numpy 1.26+, scipy 1.11+ |
-| Infra | Docker, joblib |
 
 ---
 
 ## 📄 License
 
-MIT License — veja [LICENSE](LICENSE) para detalhes.
+MIT License — see [LICENSE](LICENSE) for details.
