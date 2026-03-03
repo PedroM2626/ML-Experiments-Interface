@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.figure_factory as ff
+import streamlit as st
 from typing import List, Dict, Optional, Tuple
 from sklearn.calibration import calibration_curve
 from sklearn.model_selection import learning_curve, StratifiedKFold, KFold
@@ -291,3 +292,34 @@ def check_imbalance(y) -> Tuple[bool, float]:
         return ratio < 0.3, round(ratio, 4)
     except Exception:
         return False, 1.0
+
+
+# ── Render Wrappers for Streamlit ─────────────────────────────────────────────
+
+def render_calibration_curve(fraction_of_positives, mean_predicted, pipeline_id="Model"):
+    """Render calibration curve chart."""
+    fig = build_calibration_chart(fraction_of_positives, mean_predicted, pipeline_id)
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_learning_curve(train_sizes, train_mean, train_std, val_mean, val_std):
+    """Render learning curve chart."""
+    fig = build_learning_curve_chart(train_sizes, train_mean, train_std, val_mean, val_std)
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_residuals_plot(y_pred, residuals):
+    """Render residuals analysis charts (scatter + QQ)."""
+    col1, col2 = st.columns(2)
+    with col1:
+        fig1 = build_residuals_chart(y_pred, residuals)
+        st.plotly_chart(fig1, use_container_width=True)
+    with col2:
+        fig2 = build_qq_chart(residuals)
+        st.plotly_chart(fig2, use_container_width=True)
+
+
+def render_per_class_metrics(y_true, y_pred, labels=None):
+    """Render per-class report heatmap."""
+    fig = build_per_class_report_chart(y_true, y_pred, labels)
+    st.plotly_chart(fig, use_container_width=True)

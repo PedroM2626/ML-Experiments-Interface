@@ -5,6 +5,7 @@ Beeswarm (global importance), Waterfall (local explanation), Bar summary.
 
 import numpy as np
 import plotly.graph_objects as go
+import streamlit as st
 from typing import List, Optional
 
 _BG = "#0a0a14"
@@ -46,7 +47,7 @@ def build_shap_bar_summary(
 
     # Color gradient from gray to purple based on importance
     colors = [
-        f"rgba(139,92,246,{min(1.0, 0.3 + 0.7*(v/max(vals)):.2f)})"
+        f"rgba(139,92,246,{min(1.0, 0.3 + 0.7*(v/max(vals))):.2f})"
         for v in vals
     ]
 
@@ -182,3 +183,32 @@ def build_shap_waterfall(
         margin=dict(l=200, r=60, t=50, b=40),
     )
     return fig
+
+
+# ── Render Wrappers for Streamlit ─────────────────────────────────────────────
+
+def render_shap_summary(shap_values: np.ndarray, feature_names: List[str]):
+    """Render SHAP summary (bar and beeswarm) in tabs."""
+    tab1, tab2 = st.tabs(["Bar Summary", "Beeswarm"])
+    with tab1:
+        fig1 = build_shap_bar_summary(shap_values, feature_names)
+        st.plotly_chart(fig1, use_container_width=True)
+    with tab2:
+        fig2 = build_shap_beeswarm(shap_values, feature_names)
+        st.plotly_chart(fig2, use_container_width=True)
+
+
+def render_shap_waterfall(
+    shap_value_1d: np.ndarray, 
+    feature_names: List[str], 
+    base_value: float = 0.0,
+    prediction_label: str = ""
+):
+    """Render SHAP waterfall for a single prediction."""
+    fig = build_shap_waterfall(
+        shap_value_1d, 
+        feature_names, 
+        base_value=base_value,
+        prediction_label=prediction_label
+    )
+    st.plotly_chart(fig, use_container_width=True)
