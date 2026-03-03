@@ -6,7 +6,7 @@ import streamlit as st
 import queue
 import threading
 import time
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict
 
 
 def init_state():
@@ -95,4 +95,18 @@ def update_pipeline_node(pipeline_id: str, nodes_done: int):
         if p["pipeline_id"] == pipeline_id:
             p["nodes_done"] = nodes_done
             return
-    # Not found — skip
+
+def get_active_experiment() -> Optional[Dict]:
+    """Get the currently active experiment object from ExperimentManager."""
+    from src.utils import experiment_manager as em
+    active_id = st.session_state.get("active_experiment_id")
+    if active_id:
+        return em.get_experiment(active_id)
+    return None
+
+def get_active_results() -> List[Dict]:
+    """Get results from active experiment or legacy state."""
+    exp = get_active_experiment()
+    if exp:
+        return exp.get("results", [])
+    return st.session_state.get("results", [])

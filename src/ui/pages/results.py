@@ -17,13 +17,21 @@ from src.utils.report_generator import generate_pdf_report
 def render():
     state.init_state()
 
-    results = state.get("results", [])
+    results = state.get_active_results()
+    active_exp = state.get_active_experiment()
+    
     if not results:
         st.warning("No results yet. Please run an experiment first.")
         if st.button("← Back to Training"):
-            state.set("current_page", "training")
+            # Redirect to experiments page if we have an active exp, otherwise training
+            state.set("current_page", "experiments" if active_exp else "training")
             st.rerun()
         return
+
+    # Use metadata from experiment if available
+    dataset_name = active_exp["dataset_name"] if active_exp else state.get("dataset_name", "")
+    task_type = active_exp["task_type"] if active_exp else state.get("task_type", "classification")
+    opt_metric = active_exp["optimization_metric"] if active_exp else state.get("optimization_metric", "roc_auc")
 
     sorted_results = sorted(results, key=lambda r: r.get("primary_metric_cv", 0), reverse=True)
     best = sorted_results[0]
@@ -39,7 +47,7 @@ def render():
     col_nav1, col_nav2, col_nav3 = st.columns([1, 1, 1])
     with col_nav1:
         if st.button("← Back to Training", use_container_width=True):
-            state.set("current_page", "training")
+            state.set("current_page", "experiments" if active_exp else "training")
             st.rerun()
     with col_nav2:
         if st.button("🔄 New Experiment", use_container_width=True):
@@ -93,12 +101,12 @@ def render():
     st.divider()
 
     # ── Best model card ─────────────────────────────────────────────────────────
-    _render_best_card(best)
+    _render_best_card(best, active_exp)
 
     st.divider()
 
     # ── Metric comparison chart ─────────────────────────────────────────────────
-    _render_comparison_chart(sorted_results)
+    _render_comparison_chart(sorted_results, active_exp)
 
     st.divider()
 
@@ -106,8 +114,8 @@ def render():
     st.markdown("### 🏆 Pipeline Leaderboard")
     selected_id = render_leaderboard(
         results=sorted_results,
-        optimization_metric=state.get("optimization_metric", "roc_auc"),
-        task_type=state.get("task_type", "classification"),
+        optimization_metric=opt_metric,
+        task_type=task_type,
         selected_pipeline_id=state.get("selected_pipeline_id"),
     )
     if selected_id != state.get("selected_pipeline_id"):
@@ -119,15 +127,15 @@ def render():
         st.divider()
         result_map = {r["pipeline_id"]: r for r in results}
         if selected_id in result_map:
-            render_pipeline_detail(result_map[selected_id], task_type=state.get("task_type", "classification"))
+            render_pipeline_detail(result_map[selected_id], task_type=task_type)
 
 
-def _render_best_card(best: dict):
+def _render_best_card(best: dict, active_exp: dict = None):
     pid = best.get("pipeline_id", "")
     algo = best.get("algorithm", "")
     cv_score = best.get("primary_metric_cv", 0)
     hd_score = best.get("primary_metric_holdout", 0)
-    opt_metric = state.get("optimization_metric", "roc_auc").upper()
+    opt_metric = (active_exp["optimization_metric"] if active_exp else state.get("optimization_metric", "roc_auc")).upper()
     builds = best.get("build_time", 0)
     transformer = best.get("transformer", "")
 
@@ -140,7 +148,7 @@ def _render_best_card(best: dict):
             <span style='font-size:36px;'>🏆</span>
             <div>
                 <div style='font-size:20px;font-weight:900;color:{color};'>Best Pipeline: {pid}</div>
-                <div style='font-size:14px;color:#94a3b8;'>Dataset: {state.get("dataset_name","")} · {state.get("task_type","").title()}</div>
+                <div style='font-size:14px;color:#94a3b8;'>Dataset: {active_exp['dataset_name'] if active_exp else state.get("dataset_name","")} · {(active_exp['task_type'] if active_exp else state.get("task_type","")).title()}</div>
             </div>
         </div>
         <div style='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;'>
@@ -165,10 +173,10 @@ def _render_best_card(best: dict):
     """, unsafe_allow_html=True)
 
 
-def _render_comparison_chart(sorted_results: list):
+def _render_comparison_chart(sorted_results: list, active_exp: dict = None):
     """Bar chart comparing all pipelines by CV score."""
     st.markdown("### 📉 Pipeline Comparison")
-    opt_metric = state.get("optimization_metric", "roc_auc")
+    opt_metric = active_exp["optimization_metric"] if active_exp else state.get("optimization_metric", "roc_auc")
 
     pids = [r["pipeline_id"] for r in sorted_results]
     cv_scores = [r.get("primary_metric_cv", 0) for r in sorted_results]

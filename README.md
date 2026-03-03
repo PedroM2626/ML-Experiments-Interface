@@ -5,7 +5,7 @@ AutoML Studio is a professional **Automated Machine Learning** platform built wi
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.41%2B-red)
 ![MLflow](https://img.shields.io/badge/mlflow-2.20%2B-blue)
-![Version](https://img.shields.io/badge/version-1.3.0-orange)
+![Version](https://img.shields.io/badge/version-1.3.1-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---

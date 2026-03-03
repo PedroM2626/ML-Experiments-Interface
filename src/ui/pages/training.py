@@ -20,6 +20,13 @@ from src.tracking.mlflow_tracker import setup_mlflow, log_pipeline_run, log_expe
 def render():
     state.init_state()
 
+    active_exp = state.get_active_experiment()
+    if active_exp:
+        # If we have an active experiment from management flow, redirect to experiments page
+        # which handles the detailed view for active experiments.
+        state.set("current_page", "experiments")
+        st.rerun()
+
     df = state.get("df")
     if df is None:
         st.warning("⚠️ No dataset loaded. Please go back to the upload page.")
