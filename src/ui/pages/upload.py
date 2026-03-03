@@ -280,13 +280,15 @@ def _launch_experiment(exp_name: str, df, task_type: str, target: str):
             algorithms_to_include=state.get("selected_algos"),
         )
         exp_id = em.create_experiment(
-            name=exp_name or f"TS — {state.get('dataset_name', 'dataset')}",
+            name=exp_name or f"TS - {state.get('dataset_name', 'dataset')}",
             df=df, config=config,
             dataset_name=state.get("dataset_name", ""),
             task_type="time_series",
             target_column=target,
             optimization_metric=state.get("optimization_metric", "rmse"),
         )
+        # Unique export dir
+        config.export_dir = os.path.join("exports", exp_id)
         em.start_ts_experiment(exp_id)
     else:
         from src.automl.engine import EngineConfig
@@ -310,6 +312,8 @@ def _launch_experiment(exp_name: str, df, task_type: str, target: str):
             target_column=target,
             optimization_metric=state.get("optimization_metric", "roc_auc"),
         )
+        # Unique export dir
+        config.export_dir = os.path.join("exports", exp_id)
         em.start_experiment(exp_id)
 
     state.set("active_experiment_id", exp_id)

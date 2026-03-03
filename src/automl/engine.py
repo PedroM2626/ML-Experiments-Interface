@@ -299,14 +299,8 @@ class AutoMLEngine:
                         self._log(q, f"❌ [{pid}] Failed: {exc}")
                         continue
 
-            # ── Sort results & export best model ──────────────────────────
-            if self.results:
-                self.results.sort(key=lambda r: r.primary_metric_cv, reverse=True)
-                best = self.results[0]
-                os.makedirs(cfg.export_dir, exist_ok=True)
-                model_path = os.path.join(cfg.export_dir, "best_model.pkl")
-                joblib.dump(best.pipeline, model_path)
-                self._log(q, f"🏆 Best pipeline: {best.pipeline_id} ({best.algorithm}) — saving to {model_path}")
+            # ── Export best model so far ──────────────────────────────────
+            self._export_best_model(cfg, q)
 
             # ── Ensemble Phase ──────────────────────────────────────────
             if not self._stop_event.is_set() and len(self.results) >= 2 and cfg.task_type != "time_series":
@@ -344,6 +338,8 @@ class AutoMLEngine:
                     self._log(q, f"🥇 Ensemble built: {ens_obj.algorithm} | CV: {ens_obj.primary_metric_cv:.4f}")
                     # Save to DB
                     save_pipeline_result(exp_id, self._result_to_dict(ens_obj))
+                    # Re-export if ensemble is best
+                    self._export_best_model(cfg, q)
 
             # Update final best for DB
             if self.results:
@@ -361,6 +357,23 @@ class AutoMLEngine:
             update_experiment_status(exp_id, "failed", error=str(exc))
             self._emit(q, _evt(EventType.ERROR, error=str(exc), traceback=traceback.format_exc()))
             self._log(q, f"💥 Engine error: {exc}")
+
+    def _export_best_model(self, cfg: EngineConfig, q: queue.Queue):
+        """Sort results and dump the best pipeline to disk."""
+        if not self.results:
+            return
+        
+        # Sort by primary metric (maximize)
+        self.results.sort(key=lambda r: abs(r.primary_metric_cv), reverse=True)
+        best = self.results[0]
+        
+        try:
+            os.makedirs(cfg.export_dir, exist_ok=True)
+            model_path = os.path.join(cfg.export_dir, "best_model.pkl")
+            joblib.dump(best.pipeline, model_path)
+            self._log(q, f"📥 Best model updated: {best.pipeline_id} ({best.algorithm})")
+        except Exception as e:
+            self._log(q, f"⚠️  Failed to export model: {e}")
 
     def _get_fe_variants(self, transformers: List[str]) -> List[Dict]:
         """Return list of FE config dicts to generate variant pipelines."""

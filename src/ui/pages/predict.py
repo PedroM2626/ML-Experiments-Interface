@@ -41,8 +41,17 @@ def render():
     task_type = exp["task_type"]
     
     if not pipeline:
-        st.error("Model pipeline not found. It might not have been persisted correctly.")
-        return
+        import joblib
+        model_path = os.path.join("exports", selected_id, "best_model.pkl")
+        if os.path.exists(model_path):
+            try:
+                pipeline = joblib.load(model_path)
+            except Exception as e:
+                st.error(f"Failed to load model from disk: {e}")
+                return
+        else:
+            st.error("Model pipeline not found. It might not have been persisted correctly.")
+            return
     
     st.markdown(f"""
     <div style="background:#1e3a5f22;border:1px solid #3b82f6;border-radius:12px;padding:16px;margin-bottom:20px;">

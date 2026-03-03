@@ -33,8 +33,28 @@ def render():
     task_type = active_exp["task_type"] if active_exp else state.get("task_type", "classification")
     opt_metric = active_exp["optimization_metric"] if active_exp else state.get("optimization_metric", "roc_auc")
 
-    sorted_results = sorted(results, key=lambda r: r.get("primary_metric_cv", 0), reverse=True)
+    sorted_results = sorted(results, key=lambda r: abs(r.get("primary_metric_cv", 0)), reverse=True)
     best = sorted_results[0]
+    
+    # ── Sidebar: Model Download ─────────────────────────────────────────────────
+    with st.sidebar:
+        st.markdown("### 💾 Export Model")
+        exp_id = active_exp["id"] if active_exp else state.get("active_experiment_id", "")
+        model_path = os.path.join("exports", exp_id, "best_model.pkl") if exp_id else os.path.join("exports", "best_model.pkl")
+        
+        if os.path.exists(model_path):
+            with open(model_path, "rb") as f:
+                st.download_button(
+                    "📥 Download Best Model (.pkl)",
+                    data=f,
+                    file_name=f"best_model_{exp_id}.pkl",
+                    mime="application/octet-stream",
+                    use_container_width=True,
+                    help="Download the trained scikit-learn pipeline for offline use."
+                )
+        else:
+            st.warning("💾 Model pipeline not ready for download yet.")
+        st.divider()
 
     # ── Header ─────────────────────────────────────────────────────────────────
     st.markdown("""
@@ -55,17 +75,6 @@ def render():
             state.set("current_page", "upload")
             st.rerun()
     with col_nav3:
-        model_path = os.path.join("exports", "best_model.pkl")
-        if os.path.exists(model_path):
-            with open(model_path, "rb") as f:
-                st.download_button(
-                    "⬇️ Download Best Model",
-                    data=f,
-                    file_name="best_model.pkl",
-                    mime="application/octet-stream",
-                    use_container_width=True,
-                )
-        
         # New PDF Report Download
         report_path = os.path.join("exports", "executive_report.pdf")
         if st.button("📄 Generate Executive Report", use_container_width=True):
@@ -73,10 +82,10 @@ def render():
                 try:
                     os.makedirs("exports", exist_ok=True)
                     experiment_data = {
-                        "name": state.get("mlflow_experiment_name", "AutoML Experiment"),
-                        "dataset_name": state.get("dataset_name", "dataset.csv"),
-                        "task_type": state.get("task_type", "classification"),
-                        "target_column": state.get("target_column", "target")
+                        "name": active_exp.get("name") if active_exp else state.get("dataset_name", "AutoML Experiment"),
+                        "dataset_name": dataset_name,
+                        "task_type": task_type,
+                        "target_column": active_exp.get("target_column") if active_exp else state.get("target_column", "target")
                     }
                     generate_pdf_report(
                         experiment_data=experiment_data,
