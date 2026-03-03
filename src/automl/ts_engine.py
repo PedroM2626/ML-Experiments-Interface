@@ -54,6 +54,7 @@ class TSEngineConfig:
     optimization_metric: str = "rmse"
     random_state: int = 42
     export_dir: str = "exports"
+    algorithms_to_include: Optional[List[str]] = None
 
 
 # ── Time Series AutoML Engine ──────────────────────────────────────────────────
@@ -133,7 +134,14 @@ class TimeSeriesEngine:
 
             # Stage 4 — Model selection
             self._emit(q, _evt(EventType.STAGE, stage="Model selection", stage_idx=3))
-            registry = get_ts_algorithm_registry()
+            full_registry = get_ts_algorithm_registry()
+            if cfg.algorithms_to_include:
+                registry = {k: v for k, v in full_registry.items() if k in cfg.algorithms_to_include}
+                if not registry:
+                    registry = full_registry
+            else:
+                registry = full_registry
+                
             selected_algos = list(registry.keys())[: cfg.max_algorithms]
             self._log(q, f"🤖 TS Algorithms: {selected_algos}")
             time.sleep(0.2)

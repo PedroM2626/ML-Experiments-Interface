@@ -185,6 +185,26 @@ def render():
                                                   if v == cur_metric), metric_opts[0])))
         opt_metric_key = OPTIMIZATION_METRICS[task_type][opt_metric_label]
         state.set("optimization_metric", opt_metric_key)
+        
+        # ── Config Mode ──────────────────────────────────────────────────────────
+        st.markdown("<div style='margin-bottom:-10px; color:#64748b; font-size:13px; font-weight:600;'>🛠️ CONFIGURATION MODE</div>", unsafe_allow_html=True)
+        config_mode = st.radio("config_mode_selector", ["🚀 Auto-Pilot", "⚙️ Manual"], 
+                               label_visibility="collapsed", horizontal=True)
+        is_manual = "Manual" in config_mode
+        state.set("config_mode", "manual" if is_manual else "auto")
+
+        if is_manual:
+            from src.automl.time_series import get_ts_algorithm_registry
+            from src.automl.hyperopt import get_algorithm_registry
+            
+            reg = get_ts_algorithm_registry() if task_type == "time_series" else get_algorithm_registry(task_type)
+            all_algos = list(reg.keys())
+            selected_algos = st.multiselect("🤖 Select Algorithms", all_algos, default=all_algos[:4])
+            state.set("selected_algos", selected_algos)
+            
+            st.caption("Only selected algorithms will be trained and optimized.")
+        else:
+            state.set("selected_algos", None)
 
         col_a, col_b = st.columns(2)
         with col_a:
@@ -254,6 +274,7 @@ def _launch_experiment(exp_name: str, df, task_type: str, target: str):
             n_estimators_per_algo=state.get("n_estimators_per_algo", 2),
             hpo_trials=state.get("hpo_trials", 8),
             optimization_metric=state.get("optimization_metric", "rmse"),
+            algorithms_to_include=state.get("selected_algos"),
         )
         exp_id = em.create_experiment(
             name=exp_name or f"TS — {state.get('dataset_name', 'dataset')}",
@@ -276,6 +297,7 @@ def _launch_experiment(exp_name: str, df, task_type: str, target: str):
             hpo_trials=state.get("hpo_trials", 10),
             optimization_metric=state.get("optimization_metric", "roc_auc"),
             export_dir="exports",
+            algorithms_to_include=state.get("selected_algos"),
         )
         exp_id = em.create_experiment(
             name=exp_name or state.get("dataset_name", "Experiment"),

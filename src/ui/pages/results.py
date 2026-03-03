@@ -11,6 +11,7 @@ import joblib
 from src.utils import state
 from src.ui.components.leaderboard import render_leaderboard, ALGO_COLORS
 from src.ui.components.pipeline_detail import render_pipeline_detail
+from src.utils.report_generator import generate_pdf_report
 
 
 def render():
@@ -54,6 +55,38 @@ def render():
                     data=f,
                     file_name="best_model.pkl",
                     mime="application/octet-stream",
+                    use_container_width=True,
+                )
+        
+        # New PDF Report Download
+        report_path = os.path.join("exports", "executive_report.pdf")
+        if st.button("📄 Generate Executive Report", use_container_width=True):
+            with st.spinner("Generating professional PDF report..."):
+                try:
+                    os.makedirs("exports", exist_ok=True)
+                    experiment_data = {
+                        "name": state.get("mlflow_experiment_name", "AutoML Experiment"),
+                        "dataset_name": state.get("dataset_name", "dataset.csv"),
+                        "task_type": state.get("task_type", "classification"),
+                        "target_column": state.get("target_column", "target")
+                    }
+                    generate_pdf_report(
+                        experiment_data=experiment_data,
+                        best_pipeline=best,
+                        all_results=sorted_results,
+                        output_path=report_path
+                    )
+                    st.success("✅ Report generated!")
+                except Exception as e:
+                    st.error(f"Failed to generate report: {e}")
+
+        if os.path.exists(report_path):
+            with open(report_path, "rb") as f:
+                st.download_button(
+                    "⬇️ Download Executive Report (PDF)",
+                    data=f,
+                    file_name="executive_report.pdf",
+                    mime="application/pdf",
                     use_container_width=True,
                 )
 

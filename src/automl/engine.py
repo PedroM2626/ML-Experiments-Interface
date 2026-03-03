@@ -83,6 +83,7 @@ class EngineConfig:
     optimization_metric: str = "roc_auc"   # key in evaluator metrics
     random_state: int = 42
     export_dir: str = "exports"
+    algorithms_to_include: Optional[List[str]] = None  # None means all
 
 
 # ── Status event types ─────────────────────────────────────────────────────────
@@ -216,10 +217,16 @@ class AutoMLEngine:
 
             # Stage 5 — model selection
             self._emit(q, _evt(EventType.STAGE, stage="Model selection", stage_idx=4))
-            registry = get_algorithm_registry(cfg.task_type)
-            all_algos = list(registry.keys())
-            # Pick top N algorithms based on config
-            selected_algos = all_algos[: cfg.max_algorithms]
+            # ── Setup Registry ───────────────────────────────────────────────────
+            full_registry = get_algorithm_registry(self.config.task_type)
+            if self.config.algorithms_to_include:
+                registry = {k: v for k, v in full_registry.items() if k in self.config.algorithms_to_include}
+                if not registry: # fallback if all invalid
+                    registry = full_registry
+            else:
+                registry = full_registry
+                
+            selected_algos = list(registry.keys())[:self.config.max_algorithms]
             self._log(q, f"🤖 Algorithms selected: {selected_algos}")
             time.sleep(0.3)
 
