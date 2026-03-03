@@ -246,51 +246,60 @@ def _render_exp_card(exp: dict, is_active: bool):
     elapsed_str = ""
     if exp.get("elapsed_start"):
         if exp.get("finished_at"):
-            # Compute from timestamps
-            elapsed_str = f"⏱ {exp.get('finished_at','')}"
+            elapsed_str = exp.get("finished_at", "")[11:16]
         elif exp["status"] == ExpStatus.RUNNING:
             secs = int(time.time() - exp["elapsed_start"])
-            elapsed_str = f"⏱ {secs//60:02d}:{secs%60:02d}"
+            elapsed_str = f"{secs//60:02d}:{secs%60:02d}"
 
-    border_style = f"2px solid {color}" if is_active else f"1px solid #1e293b"
+    border = f"2px solid {color}" if is_active else "1px solid #1e293b"
 
-    best_html = ""
+    # Best pipeline row
+    best_row = ""
     if best:
-        best_html = (
-            f"<div style='margin-top:8px;background:#0a0a14;border-radius:6px;padding:6px 10px;font-size:11px;'>"
-            f"🏆 <span style='color:#a78bfa;font-weight:700;'>{best.get('pipeline_id','')}</span>"
-            f" — {best.get('algorithm','')}"
-            f" &nbsp; <span style='color:#10b981;font-weight:700;'>{abs(best.get('primary_metric_cv',0)):.4f}</span>"
-            f" <span style='color:#64748b;'>{opt_metric.upper()}</span>"
-            f"</div>"
+        val = abs(best.get("primary_metric_cv", 0))
+        best_row = (
+            f"<div style='margin-top:8px;background:#0a0a14;border-radius:6px;"
+            f"padding:6px 10px;font-size:11px;'>"
+            f"🏆 <b style='color:#a78bfa'>{best.get('pipeline_id','')}</b>"
+            f" {best.get('algorithm','')} &nbsp;"
+            f"<span style='color:#10b981;font-weight:700'>{val:.4f}</span>"
+            f" <span style='color:#64748b'>{opt_metric.upper()}</span></div>"
         )
 
-    progress_bar = ""
-    if status == ExpStatus.RUNNING and exp.get("pipelines_state"):
+    # Progress bar row (running only)
+    progress_row = ""
+    if status == ExpStatus.RUNNING:
         cfg = exp.get("config")
         max_p = getattr(cfg, "max_algorithms", 4) * getattr(cfg, "n_estimators_per_algo", 2)
         pct = min(100, int(n_done / max(1, max_p) * 100))
-        progress_bar = (
-            f"<div style='margin-top:8px;background:#0f1929;border-radius:4px;height:4px;'>"
-            f"<div style='background:linear-gradient(90deg,#8B5CF6,#06B6D4);height:4px;width:{pct}%;border-radius:4px;'></div></div>"
-            f"<div style='font-size:10px;color:#64748b;margin-top:3px;'>{n_done} pipelines done • {pct}%</div>"
+        progress_row = (
+            f"<div style='margin-top:8px;background:#0f1929;border-radius:4px;height:4px'>"
+            f"<div style='background:linear-gradient(90deg,#8B5CF6,#06B6D4);"
+            f"height:4px;width:{pct}%;border-radius:4px'></div></div>"
+            f"<div style='font-size:10px;color:#64748b;margin-top:3px'>"
+            f"{n_done} pipelines done · {pct}%</div>"
         )
 
-    st.markdown(f"""
-    <div style="background:{bg};border:{border_style};border-radius:12px;padding:14px 16px;margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-            <div style="font-size:14px;font-weight:700;color:#e2e8f0;">{task_icon} {exp['name']}</div>
-            <div style="background:{color}22;color:{color};border-radius:5px;padding:2px 8px;font-size:11px;font-weight:600;">
-                {icon} {status.title()}
-            </div>
-        </div>
-        <div style="font-size:11px;color:#64748b;margin-top:4px;">
-            📋 {exp['dataset_name']} &nbsp;·&nbsp; 🎯 {exp['target_column']} &nbsp;·&nbsp; 🕐 {exp['created_at'][11:16]}
-        </div>
-        {progress_bar}
-        {best_html}
-    </div>
-    """, unsafe_allow_html=True)
+    elapsed_html = f"<span style='color:#64748b;font-size:10px'>⏱ {elapsed_str}</span>" if elapsed_str else ""
+
+    # Render the entire card as raw HTML via st.html() — never touches Markdown parser
+    card_html = (
+        f"<div style='background:{bg};border:{border};border-radius:12px;"
+        f"padding:14px 16px;margin-bottom:6px;font-family:Inter,sans-serif'>"
+        f"<div style='display:flex;justify-content:space-between;align-items:flex-start'>"
+        f"<div style='font-size:14px;font-weight:700;color:#e2e8f0'>{task_icon} {exp['name']}</div>"
+        f"<div>"
+        f"<span style='background:{color}22;color:{color};border-radius:5px;"
+        f"padding:2px 8px;font-size:11px;font-weight:600'>{icon} {status.title()}</span>"
+        f"</div></div>"
+        f"<div style='font-size:11px;color:#64748b;margin-top:4px'>"
+        f"📋 {exp['dataset_name']} · 🎯 {exp['target_column']} · 🕐 {exp['created_at'][11:16]}"
+        f"&nbsp;{elapsed_html}</div>"
+        f"{progress_row}"
+        f"{best_row}"
+        f"</div>"
+    )
+    st.html(card_html)
 
     btn_col1, btn_col2 = st.columns(2)
     with btn_col1:
@@ -308,6 +317,7 @@ def _render_exp_card(exp: dict, is_active: bool):
                     state.set("active_experiment_id", None)
                 em.delete_experiment(exp["id"])
                 st.rerun()
+
 
 
 # ── Compare Experiments ────────────────────────────────────────────────────────

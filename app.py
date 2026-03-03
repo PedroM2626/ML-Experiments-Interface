@@ -25,75 +25,37 @@ st.set_page_config(
 
 
 def _inject_css():
-    st.markdown("""
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-<style>
-html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
-.main { background: #0a0a14; }
-.stApp { background: #0a0a14; }
-
-[data-testid="stSidebar"] {
-    background: #070711 !important;
-    border-right: 1px solid #1e293b !important;
-}
-
-.stButton > button {
-    background: linear-gradient(135deg, #6d28d9, #4f46e5) !important;
-    color: white !important;
-    border: none !important;
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-    transition: all 0.2s !important;
-}
-.stButton > button:hover {
-    transform: translateY(-1px) !important;
-    box-shadow: 0 4px 20px rgba(109, 40, 217, 0.4) !important;
-}
-.stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, #7c3aed, #2563eb) !important;
-    padding: 12px !important;
-    font-size: 15px !important;
-}
-
-.stSelectbox > div, .stSlider > div { background: #0f1929 !important; }
-hr { border-color: #1e293b !important; margin: 16px 0 !important; }
-
-[data-testid="stDataFrame"] {
-    background: #0f1929 !important;
-    border-radius: 8px !important;
-    border: 1px solid #1e293b !important;
-}
-
-.stCode pre {
-    background: #070711 !important;
-    border: 1px solid #1e293b !important;
-    border-radius: 8px !important;
-    font-size: 11px !important;
-    color: #a78bfa !important;
-    max-height: 240px !important;
-    overflow-y: auto !important;
-}
-
-[data-testid="stFileUploader"] {
-    border: 2px dashed #4f46e5 !important;
-    border-radius: 12px !important;
-    background: #0f1929 !important;
-    padding: 20px !important;
-}
-
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #070711; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #6366F1; }
-
-.stTabs [data-baseweb="tab-list"] { background: #0a0a14 !important; }
-.stTabs [data-baseweb="tab"] { color: #64748b !important; }
-.stTabs [aria-selected="true"] { color: #8B5CF6 !important; border-color: #8B5CF6 !important; }
-
-.stProgress > div > div { background: linear-gradient(90deg,#8B5CF6,#06B6D4) !important; }
-.stAlert { border-radius: 10px !important; }
-</style>
-""", unsafe_allow_html=True)
+    # Use st.html() to bypass Markdown processing — prevents CSS from rendering as raw text
+    css = (
+        "<link href='https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap' rel='stylesheet'>"
+        "<style>"
+        "html,body,[class*='css']{font-family:'Inter',sans-serif!important}"
+        ".main,.stApp{background:#0a0a14}"
+        "[data-testid='stSidebar']{background:#070711!important;border-right:1px solid #1e293b!important}"
+        ".stButton>button{background:linear-gradient(135deg,#6d28d9,#4f46e5)!important;color:white!important;"
+        "border:none!important;border-radius:8px!important;font-weight:600!important;transition:all 0.2s!important}"
+        ".stButton>button:hover{transform:translateY(-1px)!important;box-shadow:0 4px 20px rgba(109,40,217,0.4)!important}"
+        "[data-testid='stBaseButton-primary']{background:linear-gradient(135deg,#7c3aed,#2563eb)!important;"
+        "font-size:15px!important}"
+        ".stSelectbox>div,.stSlider>div{background:#0f1929!important}"
+        "hr{border-color:#1e293b!important;margin:16px 0!important}"
+        "[data-testid='stDataFrame']{background:#0f1929!important;border-radius:8px!important;border:1px solid #1e293b!important}"
+        ".stCode pre{background:#070711!important;border:1px solid #1e293b!important;border-radius:8px!important;"
+        "font-size:11px!important;color:#a78bfa!important;max-height:240px!important;overflow-y:auto!important}"
+        "[data-testid='stFileUploader']{border:2px dashed #4f46e5!important;border-radius:12px!important;"
+        "background:#0f1929!important;padding:20px!important}"
+        "::-webkit-scrollbar{width:6px;height:6px}"
+        "::-webkit-scrollbar-track{background:#070711}"
+        "::-webkit-scrollbar-thumb{background:#334155;border-radius:3px}"
+        "::-webkit-scrollbar-thumb:hover{background:#6366F1}"
+        ".stTabs [data-baseweb='tab-list']{background:#0a0a14!important}"
+        ".stTabs [data-baseweb='tab']{color:#64748b!important}"
+        ".stTabs [aria-selected='true']{color:#8B5CF6!important;border-color:#8B5CF6!important}"
+        ".stProgress>div>div{background:linear-gradient(90deg,#8B5CF6,#06B6D4)!important}"
+        ".stAlert{border-radius:10px!important}"
+        "</style>"
+    )
+    st.html(css)
 
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
