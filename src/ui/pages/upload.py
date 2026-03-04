@@ -139,9 +139,9 @@ def render():
         )
         state.set("target_column", target)
 
-        # Task type (now includes time_series)
+        # Task type (now includes time_series and text_classification)
         inferred_task = infer_task_type(df[target])
-        task_opts = ["classification", "regression", "time_series"]
+        task_opts = ["classification", "regression", "time_series", "text_classification"]
         cur_task = state.get("task_type", inferred_task)
         if cur_task not in task_opts:
             cur_task = inferred_task
@@ -174,6 +174,29 @@ def render():
                                 state.get("horizon", 12))
             state.set("horizon", horizon)
 
+        # ── Text Classification specific settings ──────────────────────────
+        if task_type == "text_classification":
+            st.markdown("<div style='background:#0f1929;border-left:3px solid #06B6D4;padding:10px 14px;border-radius:6px;margin:8px 0;'>"
+                        "<span style='color:#67e8f9;font-weight:600;font-size:12px;'>💬 Text Classification Configuration</span></div>",
+                        unsafe_allow_html=True)
+
+            text_cols = ["(none)"] + df.select_dtypes(include="object").columns.tolist()
+            cur_text_col = state.get("text_column", "(none)")
+            text_col_idx = text_cols.index(cur_text_col) if cur_text_col in text_cols else 0
+            text_col = st.selectbox("💬 Text column (raw text)", text_cols, index=text_col_idx)
+            state.set("text_column", text_col if text_col != "(none)" else "")
+
+            ngram_opts = {"Unigrams (1,1)": (1, 1), "Bigrams (1,2)": (1, 2), "Trigrams (1,3)": (1, 3)}
+            ngram_label = st.selectbox("📝 N-gram range", list(ngram_opts.keys()), index=1)
+            state.set("ngram_range", ngram_opts[ngram_label])
+
+            max_feat = st.select_slider(
+                "📊 TF-IDF max features",
+                options=[5000, 10000, 20000, 50000, 100000],
+                value=state.get("tfidf_max_features", 20000),
+            )
+            state.set("tfidf_max_features", max_feat)
+
         st.divider()
 
         # Optimization metric
@@ -199,23 +222,33 @@ def render():
         if is_manual:
             from src.automl.time_series import get_ts_algorithm_registry
             from src.automl.hyperopt import get_algorithm_registry
-            
-            reg = get_ts_algorithm_registry() if task_type == "time_series" else get_algorithm_registry(task_type)
+            from src.automl.nlp_engine import get_nlp_algorithm_registry
+
+            if task_type == "text_classification":
+                reg = get_nlp_algorithm_registry()
+            elif task_type == "time_series":
+                reg = get_ts_algorithm_registry()
+            else:
+                reg = get_algorithm_registry(task_type)
+
             all_algos = list(reg.keys())
             selected_algos = st.multiselect("🤖 Select Algorithms", all_algos, default=all_algos[:4])
             state.set("selected_algos", selected_algos)
-            
+
             st.caption("Only selected algorithms will be trained and optimized.")
         else:
             state.set("selected_algos", None)
 
+        # Disable numeric sliders that don't apply to NLP
+        is_nlp = task_type == "text_classification"
         col_a, col_b = st.columns(2)
         with col_a:
             test_size = st.slider("📦 Holdout %", 5, 30,
                                   int(state.get("test_size", 0.1) * 100), step=5,
-                                  disabled=(task_type == "time_series"))
+                                  disabled=(task_type in ("time_series", "text_classification")))
             state.set("test_size", test_size / 100)
-            n_folds = st.slider("🔄 CV Folds", 2, 10, state.get("n_folds", 3))
+            n_folds = st.slider("🔄 CV Folds", 2, 10, state.get("n_folds", 3),
+                                disabled=is_nlp)
             state.set("n_folds", n_folds)
 
         with col_b:
@@ -241,6 +274,9 @@ def render():
         can_train = df is not None and target is not None
         if (task_type == "time_series" and not state.get("date_column")):
             st.info("💡 Select a date/time column for time series training.")
+            can_train = False
+        if (task_type == "text_classification" and not state.get("text_column")):
+            st.info("💡 Select a text column for NLP training.")
             can_train = False
 
         if st.button(
@@ -290,6 +326,32 @@ def _launch_experiment(exp_name: str, df, task_type: str, target: str):
         # Unique export dir
         config.export_dir = os.path.join("exports", exp_id)
         em.start_ts_experiment(exp_id)
+
+    elif task_type == "text_classification":
+        from src.automl.nlp_engine import NLPConfig
+        config = NLPConfig(
+            text_column=state.get("text_column", ""),
+            target_column=target,
+            max_features=state.get("tfidf_max_features", 20_000),
+            ngram_range=state.get("ngram_range", (1, 2)),
+            max_algorithms=state.get("max_algorithms", 5),
+            hpo_trials=state.get("hpo_trials", 8),
+            optimization_metric=state.get("optimization_metric", "f1"),
+            algorithms_to_include=state.get("selected_algos"),
+        )
+        exp_id = em.create_experiment(
+            name=exp_name or f"NLP - {state.get('dataset_name', 'text_data')}",
+            df=df, config=config,
+            dataset_name=state.get("dataset_name", ""),
+            task_type="text_classification",
+            target_column=target,
+            optimization_metric=state.get("optimization_metric", "f1"),
+        )
+        config.export_dir = os.path.join("exports", exp_id)
+        config.experiment_id = exp_id
+        config.name = exp_name or f"NLP - {state.get('dataset_name', 'text_data')}"
+        em.start_nlp_experiment(exp_id)
+
     else:
         from src.automl.engine import EngineConfig
         config = EngineConfig(

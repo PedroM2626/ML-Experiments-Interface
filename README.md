@@ -5,7 +5,7 @@ AutoML Studio is a professional **Automated Machine Learning** platform built wi
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.41%2B-red)
 ![MLflow](https://img.shields.io/badge/mlflow-2.20%2B-blue)
-![Version](https://img.shields.io/badge/version-1.4.0-orange)
+![Version](https://img.shields.io/badge/version-1.6.0-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -21,14 +21,25 @@ This project aims to bridge the gap between open-source AutoML libraries and ent
 ## ✨ Key Features
 
 ### 🤖 Intelligent AutoML Engine
-- **Task Detection**: Automatic detection of Classification, Regression, or Time Series tasks.
+- **Task Detection**: Automatic detection of Classification, Regression, Time Series, and **Text Classification** tasks.
 - **Auto-Pilot vs. Manual Mode**: Choose between fully autonomous training or manually selecting algorithms and transformers.
 - **Top-Tier Algorithms**: XGBoost, LightGBM, GradientBoosting, RandomForest, ExtraTrees, Ridge, and more.
 - **Advanced Stacking**: Auto-combination of best performers into an ensemble model.
 
+### 🧠 Deep Learning
+- **MLP (Multi-Layer Perceptron)**: `MLPClassifier` and `MLPRegressor` from sklearn with Optuna HPO (hidden layers, activation, alpha, learning rate). Available for all tabular tasks.
+- **Keras / TensorFlow Networks**: Dense neural networks with configurable layers, dropout, and batch normalization. Sklearn-compatible wrapper falls back to MLP if TensorFlow is not installed.
+- **Hyperparameter Search Space**: Layer counts (1–3), units (64–256), dropout (0.1–0.5), optimizer (Adam, RMSProp) are all auto-tuned.
+
+### 💬 NLP Text Classification
+- **TF-IDF Vectorization**: Configurable n-gram range (1-1 to 1-3), max features (5K–100K), and sublinear frequency scaling.
+- **Classic Text Classifiers**: Logistic Regression, LinearSVC (calibrated), ComplementNB, SGD Classifier, MLP, and XGBoost.
+- **Optuna HPO for Text**: Lightweight hyperparameter search with 2-fold CV for speed.
+- **New Task Type**: `text_classification` integrates natively into the Upload → Train → Results → Predict flow.
+
 ### 🔍 Model Explainability (SHAP)
 - **Global Importance**: Beeswarm and Bar summary charts to understand overall feature impact.
-- **Local Waterfall**: Specific explanations for individual predictions — "Why was this customer classified as X?"
+- **Local Waterfall**: Specific explanations for individual predictions — “Why was this customer classified as X?”
 
 ### ⏱️ Time Series Forecasting
 - **ARIMA & Tree-based Models**: Comprehensive forecasting with specialized algorithms.
@@ -79,6 +90,8 @@ docker compose up --build
 |-----------|------------|
 | **UI** | Streamlit, Plotly, CSS Glassmorphism |
 | **Machine Learning** | scikit-learn, XGBoost, LightGBM, SHAP |
+| **Deep Learning** | TensorFlow/Keras (optional), sklearn MLP |
+| **NLP** | TF-IDF (sklearn), Naive Bayes, LinearSVC |
 | **Optimization** | Optuna (TPE Sampler) |
 | **Tracking** | MLflow |
 | **Storage** | SQLite, joblib |
@@ -93,7 +106,10 @@ docker compose up --build
 midnight-hawking/
 ├── app.py                # Streamlit entry point
 ├── src/
-│   ├── automl/           # Core Engines (Regression, Classification, Time Series)
+│   ├── automl/           # Core Engines (Classification, Regression, Time Series, NLP)
+│   │   ├── engine.py     # Main AutoML engine
+│   │   ├── nlp_engine.py # TF-IDF + classifier NLP engine [NEW in v1.4]
+│   │   └── deep_learning.py  # MLP & Keras wrappers [NEW in v1.4]
 │   ├── ui/               # Pages & Professional Components
 │   ├── db/               # SQLite Persistence Layer
 │   ├── tracking/         # MLflow Integration

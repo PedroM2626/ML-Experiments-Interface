@@ -14,6 +14,7 @@ from sklearn.linear_model import (
 )
 from sklearn.svm import SVC, SVR
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
+from sklearn.neural_network import MLPClassifier, MLPRegressor
 from xgboost import XGBClassifier, XGBRegressor
 from lightgbm import LGBMClassifier, LGBMRegressor
 try:
@@ -23,6 +24,15 @@ except ImportError:
     _CATBOOST_AVAILABLE = False
     CatBoostClassifier = None
     CatBoostRegressor = None
+
+try:
+    from .deep_learning import KerasClassifier, KerasRegressor
+    _KERAS_AVAILABLE = True
+except Exception:
+    _KERAS_AVAILABLE = False
+    KerasClassifier = None
+    KerasRegressor = None
+
 from typing import Dict, Any, Tuple
 import warnings
 warnings.filterwarnings("ignore")
@@ -39,6 +49,7 @@ CLASSIFIERS = {
     "LightGBM": LGBMClassifier,
     "LogisticRegression": LogisticRegression,
     "KNeighbors": KNeighborsClassifier,
+    "MLP": MLPClassifier,
 }
 
 REGRESSORS = {
@@ -49,12 +60,17 @@ REGRESSORS = {
     "LightGBM": LGBMRegressor,
     "Ridge": Ridge,
     "KNeighbors": KNeighborsRegressor,
+    "MLP": MLPRegressor,
     "ARIMA": None, # Handled specially or imported from time_series
 }
 
 if _CATBOOST_AVAILABLE:
     CLASSIFIERS["CatBoost"] = CatBoostClassifier
     REGRESSORS["CatBoost"] = CatBoostRegressor
+
+if _KERAS_AVAILABLE:
+    CLASSIFIERS["KerasNet"] = KerasClassifier
+    REGRESSORS["KerasNet"] = KerasRegressor
 
 ALGORITHM_COLORS = {
     "GradientBoosting": "#8B5CF6",   # purple
@@ -66,6 +82,8 @@ ALGORITHM_COLORS = {
     "LogisticRegression": "#6366F1", # indigo
     "Ridge": "#6366F1",
     "KNeighbors": "#EC4899",         # pink
+    "MLP": "#7C3AED",               # violet
+    "KerasNet": "#DB2777",          # fuchsia
 }
 
 
@@ -140,7 +158,27 @@ def get_search_space(algo_name: str, trial: optuna.Trial) -> Dict:
 
     elif algo_name == "KNeighbors":
         return {
+            "n_neighbors": trial.suggest_int("n_neighbors", 3, 15),
             "metric": trial.suggest_categorical("metric", ["euclidean", "manhattan"]),
+        }
+
+    elif algo_name == "MLP":
+        return {
+            "hidden_layer_sizes": trial.suggest_categorical(
+                "hidden_layer_sizes",
+                [(64,), (128,), (256,), (128, 64), (256, 128), (256, 128, 64)]
+            ),
+            "activation": trial.suggest_categorical("activation", ["relu", "tanh"]),
+            "alpha": trial.suggest_float("alpha", 1e-5, 1e-1, log=True),
+            "learning_rate_init": trial.suggest_float("learning_rate_init", 1e-4, 1e-2, log=True),
+        }
+
+    elif algo_name == "KerasNet":
+        return {
+            "units": trial.suggest_categorical("units", [64, 128, 256]),
+            "hidden_layers": trial.suggest_int("hidden_layers", 1, 3),
+            "dropout": trial.suggest_float("dropout", 0.1, 0.5),
+            "optimizer": trial.suggest_categorical("optimizer", ["adam", "rmsprop"]),
         }
 
     elif algo_name == "ARIMA":
@@ -169,6 +207,25 @@ def get_default_params(algo_name: str, task_type: str) -> Dict:
         "Ridge": {"alpha": 1.0},
         "KNeighbors": {"n_neighbors": 5},
         "ARIMA": {"p": 1, "d": 0, "q": 1, "s": 0},
+        "MLP": {
+            "hidden_layer_sizes": (128, 64),
+            "activation": "relu",
+            "alpha": 1e-4,
+            "learning_rate_init": 1e-3,
+            "max_iter": 300,
+            "early_stopping": True,
+            "validation_fraction": 0.1,
+            "random_state": 42,
+        },
+        "KerasNet": {
+            "units": 128,
+            "hidden_layers": 2,
+            "dropout": 0.3,
+            "optimizer": "adam",
+            "epochs": 50,
+            "batch_size": 32,
+            "random_state": 42,
+        },
     }
     return defaults.get(algo_name, {})
 

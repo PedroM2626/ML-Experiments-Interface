@@ -146,6 +146,39 @@ def start_ts_experiment(exp_id: str):
     exp["logs"] = [f"[{time.strftime('%H:%M:%S')}] 🚀 TS Experiment started: {exp['name']}"]
 
 
+def start_nlp_experiment(exp_id: str):
+    """Launch the NLP engine for this text-classification experiment."""
+    from src.automl.nlp_engine import NLPEngine
+
+    store = _get_store()
+    exp = store.get(exp_id)
+    if exp is None:
+        raise ValueError(f"Experiment {exp_id} not found")
+
+    config = exp["config"]
+    df = exp["df"]
+
+    # Set experiment id on config so the engine can store to DB correctly
+    if hasattr(config, "experiment_id"):
+        config.experiment_id = exp_id
+    if hasattr(config, "name"):
+        config.name = exp["name"]
+
+    engine = NLPEngine(config)
+    event_q = queue.Queue()
+    thread = engine.run_async(df, event_q)
+
+    exp["engine"] = engine
+    exp["event_queue"] = event_q
+    exp["thread"] = thread
+    exp["status"] = ExpStatus.RUNNING
+    exp["elapsed_start"] = time.time()
+    exp["completed_stages"] = []
+    exp["pipelines_state"] = []
+    exp["results"] = []
+    exp["logs"] = [f"[{time.strftime('%H:%M:%S')}] 💬 NLP Experiment started: {exp['name']}"]
+
+
 def stop_experiment(exp_id: str):
     """Signal the engine to stop."""
     store = _get_store()

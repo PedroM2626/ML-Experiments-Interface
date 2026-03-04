@@ -49,6 +49,10 @@ OPTIMIZATION_METRICS = {
         "MAPE (%)": "mape",
         "R²": "r2",
     },
+    "text_classification": {
+        "F1 Score": "f1",
+        "Accuracy": "accuracy",
+    },
 }
 
 
