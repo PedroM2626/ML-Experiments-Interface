@@ -1,5 +1,5 @@
 """
-PDF Report Generator for AutoML Studio.
+PDF Report Generator for MLine.
 Uses fpdf2 to create professional executive summaries.
 """
 
@@ -20,7 +20,7 @@ class AutoMLReport(FPDF):
         
         self.set_font('helvetica', 'B', 20)
         self.set_text_color(255, 255, 255)
-        self.cell(0, 15, 'AutoML Studio - Executive Report', ln=True, align='C')
+        self.cell(0, 15, 'MLine - Executive Report', ln=True, align='C')
         self.set_font('helvetica', '', 10)
         self.cell(0, 5, f'Generated on {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', ln=True, align='C')
         self.ln(10)

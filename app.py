@@ -1,5 +1,5 @@
 """
-AutoML Studio — main Streamlit entrypoint.
+MLine — main Streamlit entrypoint.
 """
 
 import sys
@@ -17,7 +17,7 @@ from src.ui.pages import experiments
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="AutoML Studio",
+    page_title="MLine",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -65,7 +65,7 @@ def render_sidebar():
         <div style="text-align:center;padding:20px 0 24px 0;">
             <div style="font-size:42px;">🤖</div>
             <div style="font-size:18px;font-weight:900;background:linear-gradient(135deg,#8B5CF6,#06B6D4);
-            -webkit-background-clip:text;-webkit-text-fill-color:transparent;">AutoML Studio</div>
+            -webkit-background-clip:text;-webkit-text-fill-color:transparent;">MLine</div>
             <div style="font-size:10px;color:#475569;margin-top:4px;">Automated Machine Learning</div>
         </div>
         """, unsafe_allow_html=True)

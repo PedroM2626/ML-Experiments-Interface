@@ -1,5 +1,5 @@
 """
-Evaluation charts for AutoML Studio.
+Evaluation charts for MLine.
 Calibration curves, learning curves, residual analysis, per-class reports.
 All return Plotly figures matching the dark theme.
 """

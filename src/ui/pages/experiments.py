@@ -64,7 +64,7 @@ def render():
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
             <span style="background:#111827;border:1px solid #1e293b;color:#94a3b8;font-size:11px;border-radius:6px;padding:4px 10px;">
-                AutoML Studio Platform
+                MLine Platform
             </span>
         </div>
     </div>

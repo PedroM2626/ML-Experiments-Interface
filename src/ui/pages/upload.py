@@ -22,7 +22,7 @@ def render():
         <div style="display:inline-flex;align-items:center;gap:14px;margin-bottom:12px;">
             <span style="font-size:48px;">🤖</span>
             <div style="text-align:left;">
-                <h1 style="margin:0;font-size:34px;font-weight:900;background:linear-gradient(135deg,#8B5CF6,#06B6D4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">AutoML Studio</h1>
+                <h1 style="margin:0;font-size:34px;font-weight:900;background:linear-gradient(135deg,#8B5CF6,#06B6D4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">MLine</h1>
                 <p style="margin:0;color:#64748b;font-size:14px;">Automated Machine Learning · Azure ML · SageMaker · Vertex AI · WatsonX style</p>
             </div>
         </div>
@@ -265,7 +265,7 @@ def render():
                                        value=state.get("mlflow_tracking_uri", "mlruns"))
             state.set("mlflow_tracking_uri", mlflow_uri)
             mlflow_exp = st.text_input("Experiment Name",
-                                       value=state.get("mlflow_experiment_name", "AutoML_Experiment"))
+                                       value=state.get("mlflow_experiment_name", "MLine_Experiment"))
             state.set("mlflow_experiment_name", mlflow_exp)
 
         st.divider()
@@ -297,7 +297,7 @@ def _launch_experiment(exp_name: str, df, task_type: str, target: str):
     # Setup MLflow
     setup_mlflow(
         tracking_uri=state.get("mlflow_tracking_uri", "mlruns"),
-        experiment_name=state.get("mlflow_experiment_name", "AutoML_Experiment"),
+        experiment_name=state.get("mlflow_experiment_name", "MLine_Experiment"),
     )
 
     if task_type == "time_series":

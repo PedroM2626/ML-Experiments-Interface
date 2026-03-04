@@ -1,6 +1,6 @@
-# AutoML Studio 🤖
+# MLine 🤖
 
-AutoML Studio is a professional **Automated Machine Learning** platform built with Streamlit. It is deeply inspired by enterprise solutions such as **IBM WatsonX AutoAI**, Azure ML, and Vertex AI, replicate their core experience of automated pipeline discovery, interactive progress mapping, and professional model evaluation.
+MLine is a professional **Automated Machine Learning** platform built with Streamlit. It is deeply inspired by enterprise solutions such as **IBM WatsonX AutoAI**, Azure ML, and Vertex AI, replicate their core experience of automated pipeline discovery, interactive progress mapping, and professional model evaluation.
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.41%2B-red)
@@ -79,7 +79,7 @@ Access the studio at **http://localhost:8501**
 ```bash
 docker compose up --build
 ```
-- **AutoML Studio**: http://localhost:8501
+- **MLine**: http://localhost:8501
 - **MLflow UI**: http://localhost:5000
 
 ---

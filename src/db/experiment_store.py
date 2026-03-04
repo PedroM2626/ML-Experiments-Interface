@@ -1,5 +1,5 @@
 """
-SQLite persistence layer for AutoML Studio experiments.
+SQLite persistence layer for MLine experiments.
 Survives Streamlit page refreshes — experiments and pipeline results are
 stored in `experiments.db` at the project root.
 """

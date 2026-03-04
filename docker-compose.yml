@@ -21,7 +21,7 @@ services:
       - "8501:8501"
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
-      - MLFLOW_EXPERIMENT_NAME=AutoML_Experiment
+      - MLFLOW_EXPERIMENT_NAME=MLine_Experiment
     volumes:
       - ./uploads:/app/uploads
       - ./exports:/app/exports

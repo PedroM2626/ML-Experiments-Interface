@@ -25,7 +25,7 @@ def get_tracking_uri() -> str:
 
 
 def get_experiment_name() -> str:
-    return os.getenv("MLFLOW_EXPERIMENT_NAME", "AutoML_Experiment")
+    return os.getenv("MLFLOW_EXPERIMENT_NAME", "MLine_Experiment")
 
 
 def setup_mlflow(tracking_uri: Optional[str] = None, experiment_name: Optional[str] = None):

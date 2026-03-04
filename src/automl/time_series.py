@@ -1,6 +1,6 @@
 """
 Time Series module — feature engineering, walk-forward CV, and TS-specific
-algorithms for AutoML Studio forecasting experiments.
+algorithms for MLine forecasting experiments.
 """
 
 import numpy as np

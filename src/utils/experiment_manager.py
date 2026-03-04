@@ -20,7 +20,7 @@ def _now_iso() -> str:
 
 
 # ── Key used in st.session_state ─────────────────────────────────────────────
-_STATE_KEY = "_automl_experiments"
+_STATE_KEY = "_mline_experiments"
 
 
 def _get_store() -> Dict[str, Dict]:

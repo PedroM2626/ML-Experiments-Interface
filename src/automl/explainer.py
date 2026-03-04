@@ -1,5 +1,5 @@
 """
-SHAP-based explainability for AutoML Studio.
+SHAP-based explainability for MLine.
 Computes global (beeswarm) and local (waterfall) explanations for any pipeline.
 """
 

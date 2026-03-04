@@ -1,5 +1,5 @@
 """
-SHAP-based interactive charts for AutoML Studio.
+SHAP-based interactive charts for MLine.
 Beeswarm (global importance), Waterfall (local explanation), Bar summary.
 """
 

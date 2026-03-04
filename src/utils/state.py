@@ -49,7 +49,7 @@ def init_state():
         "selected_pipeline_id": None,
         "mlflow_run_id": None,
         "mlflow_tracking_uri": "mlruns",
-        "mlflow_experiment_name": "AutoML_Experiment",
+        "mlflow_experiment_name": "MLine_Experiment",
     }
     for key, val in defaults.items():
         if key not in st.session_state:
