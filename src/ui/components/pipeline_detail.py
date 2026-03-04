@@ -60,6 +60,9 @@ def render_pipeline_detail(result: Dict, task_type: str = "classification"):
         _render_metrics_table(result, task_type)
         _render_hyperparams(result)
         
+        st.divider()
+        _render_consumption_code(result, task_type)
+        
         # --- SHAP Explanations ---
         st.divider()
         st.markdown("**✨ Model Explainability (SHAP)**")
@@ -166,3 +169,36 @@ def _render_hyperparams(result: Dict):
         use_container_width=True,
         height=200,
     )
+
+
+def _render_consumption_code(result: Dict, task_type: str):
+    pid = result.get("pipeline_id", "")
+    
+    st.markdown("**💻 How to use this model in Python**")
+    with st.expander("Show consumption code mapping"):
+        code = f'''import joblib
+import pandas as pd
+
+# 1. Load the model pipeline
+# Make sure you downloaded 'best_model.pkl' from the MLine Results page
+# Note: For this specific pipeline use best_model_{pid}.pkl instead if you renamed it
+pipeline = joblib.load("best_model.pkl")
+
+# 2. Prepare your input data (must match training schema)
+data = pd.DataFrame([{{
+    # "feature1": value1,
+    # "feature2": value2,
+}}])
+
+# 3. Predict
+predictions = pipeline.predict(data)
+print("Predictions:", predictions)
+'''
+        if task_type in ["classification", "text_classification"]:
+            code += '''
+# For classification you can also get probabilities:
+# probabilities = pipeline.predict_proba(data)
+# print("Probabilities:", probabilities)
+'''
+        st.code(code, language="python")
+
