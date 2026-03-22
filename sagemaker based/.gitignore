@@ -1,0 +1,32 @@
+# Byte-compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Data directories (large files)
+data/
+models/
+mlruns/
+
+# Environment files
+.env
+!.env.example
+
+# AutoGluon artifacts
+*.pkl
+*.cbm
+
+# System files
+.DS_Store
+*.log
+.idea/
+.vscode/
+
+# Streamlit cache
+.streamlit/

@@ -1,0 +1,41 @@
+version: "3.9"
+
+services:
+  # ── AutoML Studio App ─────────────────────────────────────────────────────
+  automl-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: automl-studio
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./mlruns:/app/mlruns
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - MLFLOW_EXPERIMENT_NAME=AutoML-Studio
+    depends_on:
+      - mlflow-server
+    restart: unless-stopped
+    networks:
+      - automl-net
+
+  # ── MLflow Tracking Server ────────────────────────────────────────────────
+  mlflow-server:
+    image: ghcr.io/mlflow/mlflow:v2.21.1
+    container_name: mlflow-server
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/mlflow/mlruns
+    command: >
+      mlflow server --backend-store-uri /mlflow/mlruns --default-artifact-root /mlflow/mlruns --host 0.0.0.0 --port 5000
+    restart: unless-stopped
+    networks:
+      - automl-net
+
+networks:
+  automl-net:
+    driver: bridge
