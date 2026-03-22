@@ -14,13 +14,15 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional, Any
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
-# Add the parent directory to the path to import the pyramid module
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add the project root to the path so the local module can be imported reliably.
+PROJECT_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 try:
-    from experiments.flexible_ensemble_pyramid import (
+    from flexible_ensemble_pyramid import (
         PyramidEnsemble, 
         RLMetaLearner, 
         NASController,
@@ -46,8 +48,36 @@ try:
         mlflow
     )
 except ImportError:
-    st.error("Could not import flexible_ensemble_pyramid module. Please ensure it's in the correct location.")
-    st.stop()
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT.parent))
+        from experiments.flexible_ensemble_pyramid import (
+            PyramidEnsemble, 
+            RLMetaLearner, 
+            NASController,
+            setup_tracking,
+            load_data,
+            clean_tweet,
+            get_model,
+            SEED,
+            CV_FOLDS,
+            EXP_NAME,
+            PATIENCE,
+            MIN_MODELS_PER_LAYER,
+            MAX_MODELS_PER_LAYER,
+            EPSILON_RL,
+            OPTIM_METRIC,
+            TFIDF_MAX,
+            TFIDF_NGRAMS,
+            JITTER,
+            STRATEGY,
+            PYRAMID_LAYER_TYPE,
+            HOMOGENEOUS_MODEL,
+            HOMOGENEOUS_VARIANTS,
+            mlflow
+        )
+    except ImportError:
+        st.error("Could not import flexible_ensemble_pyramid module. Please ensure it's in the correct location.")
+        st.stop()
 
 # Page configuration
 st.set_page_config(
@@ -130,6 +160,12 @@ st.markdown("""
 # Main header
 st.markdown("<h1 class='main-header'>Enhanced Flexible Ensemble Pyramid</h1>", unsafe_allow_html=True)
 
+# Runtime data source controls
+uploaded_training_file = None
+uploaded_validation_file = None
+data_source_mode = st.session_state.get("data_source_mode", "repository")
+validation_split_pct = st.session_state.get("validation_split_pct", 20)
+
 # Sidebar configuration
 with st.sidebar:
     st.markdown("<h2 style='color: #495057;'>Configuracao</h2>", unsafe_allow_html=True)
@@ -165,6 +201,48 @@ with st.sidebar:
         use_nas_val, use_jitter_val = True, True
         strategy_val = "dense"
 
+    # Data source
+    st.markdown("<h3 style='color: #6c757d;'>Fonte de Dados</h3>", unsafe_allow_html=True)
+    source_options = {
+        "Dataset padrao do projeto": "repository",
+        "Upload CSV proprio": "upload",
+    }
+    selected_source_label = st.radio(
+        "Origem dos dados:",
+        list(source_options.keys()),
+        index=0 if data_source_mode == "repository" else 1,
+        help="Use o dataset padrao esperado pelo projeto ou envie seus proprios CSVs.",
+    )
+    data_source_mode = source_options[selected_source_label]
+    st.session_state.data_source_mode = data_source_mode
+
+    if data_source_mode == "upload":
+        st.caption("CSV de treino com colunas obrigatorias `text` e `sentiment`.")
+        uploaded_training_file = st.file_uploader(
+            "Treino CSV",
+            type=["csv"],
+            key="ensemble_train_csv",
+            help="Arquivo principal usado para treino.",
+        )
+        uploaded_validation_file = st.file_uploader(
+            "Validacao CSV (opcional)",
+            type=["csv"],
+            key="ensemble_val_csv",
+            help="Se omitido, o app faz um split automatico do treino.",
+        )
+        validation_split_pct = st.slider(
+            "Split automatico para validacao (%)",
+            10,
+            40,
+            st.session_state.get("validation_split_pct", 20),
+            5,
+            disabled=(uploaded_validation_file is not None),
+            help="Usado apenas quando o arquivo de validacao nao e enviado.",
+        )
+        st.session_state.validation_split_pct = validation_split_pct
+    else:
+        st.caption("Usa o dataset local esperado pelo projeto, quando ele estiver disponivel.")
+    
     # Experiment settings
     st.markdown("<h3 style='color: #6c757d;'>Configuracoes do Experimento</h3>", unsafe_allow_html=True)
     num_layers = st.slider("Número de Camadas", 2, 20, num_layers_val, 1,
@@ -251,6 +329,117 @@ if 'layer_strategy_map' not in st.session_state:
     st.session_state.layer_strategy_map = {}
 if 'artifacts_dir' not in st.session_state:
     st.session_state.artifacts_dir = None
+if 'data_source_mode' not in st.session_state:
+    st.session_state.data_source_mode = "repository"
+if 'validation_split_pct' not in st.session_state:
+    st.session_state.validation_split_pct = 20
+
+
+REQUIRED_UPLOAD_COLUMNS = {"text", "sentiment"}
+
+
+def _read_uploaded_csv(uploaded_file):
+    uploaded_file.seek(0)
+    return pd.read_csv(uploaded_file)
+
+
+def _prepare_uploaded_dataset(df, source_name):
+    missing_columns = sorted(REQUIRED_UPLOAD_COLUMNS.difference(df.columns))
+    if missing_columns:
+        raise ValueError(
+            f"{source_name}: faltam colunas obrigatorias: {', '.join(missing_columns)}"
+        )
+
+    prepared = df.copy()
+    if "tweet_id" not in prepared.columns:
+        prepared["tweet_id"] = np.arange(1, len(prepared) + 1)
+    if "entity" not in prepared.columns:
+        prepared["entity"] = "custom"
+
+    prepared["text"] = prepared["text"].fillna("").astype(str)
+    prepared["sentiment"] = prepared["sentiment"].fillna("").astype(str).str.strip()
+    prepared["clean_text"] = prepared["text"].apply(clean_tweet)
+    prepared = prepared[
+        (prepared["sentiment"] != "") &
+        (prepared["clean_text"].str.len() > 0)
+    ].copy()
+
+    if prepared.empty:
+        raise ValueError(
+            f"{source_name}: nenhum registro valido permaneceu apos a limpeza."
+        )
+
+    return prepared.reset_index(drop=True)
+
+
+def _apply_runtime_subsample(train_df, val_df, subsample_size):
+    subsample_val = subsample_size // 4 if subsample_size > 0 else 0
+
+    if subsample_size > 0 and subsample_size < len(train_df):
+        train_df = train_df.sample(n=subsample_size, random_state=SEED)
+    if subsample_val > 0 and subsample_val < len(val_df):
+        val_df = val_df.sample(n=subsample_val, random_state=SEED)
+
+    return train_df.reset_index(drop=True), val_df.reset_index(drop=True)
+
+
+def load_runtime_data(
+    source_mode,
+    training_file=None,
+    validation_file=None,
+    subsample_size=0,
+    validation_split_pct=20,
+):
+    if source_mode != "upload":
+        train_df, val_df = load_data(
+            subsample_train=subsample_size,
+            subsample_val=subsample_size // 4 if subsample_size > 0 else 0,
+        )
+        return train_df.reset_index(drop=True), val_df.reset_index(drop=True), "repository sample"
+
+    if training_file is None:
+        raise ValueError(
+            "Envie ao menos um CSV de treino com as colunas 'text' e 'sentiment'."
+        )
+
+    train_df = _prepare_uploaded_dataset(
+        _read_uploaded_csv(training_file),
+        training_file.name,
+    )
+
+    if validation_file is not None:
+        val_df = _prepare_uploaded_dataset(
+            _read_uploaded_csv(validation_file),
+            validation_file.name,
+        )
+    else:
+        test_size = max(0.10, min(validation_split_pct / 100.0, 0.40))
+        stratify = None
+        class_counts = train_df["sentiment"].value_counts()
+        if (
+            train_df["sentiment"].nunique() > 1 and
+            not class_counts.empty and
+            class_counts.min() > 1
+        ):
+            stratify = train_df["sentiment"]
+
+        try:
+            train_df, val_df = train_test_split(
+                train_df,
+                test_size=test_size,
+                random_state=SEED,
+                stratify=stratify,
+            )
+        except ValueError:
+            train_df, val_df = train_test_split(
+                train_df,
+                test_size=test_size,
+                random_state=SEED,
+                stratify=None,
+            )
+
+    train_df, val_df = _apply_runtime_subsample(train_df, val_df, subsample_size)
+    return train_df, val_df, "uploaded csv"
 
 # Enhanced visualization functions
 def create_enhanced_ensemble_visualization(results, pyramid, show_connections=True, show_performance=True, layer_strategy_map=None):
@@ -809,7 +998,13 @@ if st.session_state.run_training:
             status_text.text("Setting up tracking...")
             setup_tracking()
             status_text.text("Loading data...")
-            train_df, val_df = load_data(subsample_train=subsample_size, subsample_val=subsample_size // 4 if subsample_size > 0 else 0)
+            train_df, val_df, active_data_source = load_runtime_data(
+                source_mode=data_source_mode,
+                training_file=uploaded_training_file,
+                validation_file=uploaded_validation_file,
+                subsample_size=subsample_size,
+                validation_split_pct=validation_split_pct,
+            )
             status_text.text("Vectorizing text...")
             vectorizer = TfidfVectorizer(
                 max_features=tfidf_max,
@@ -937,6 +1132,9 @@ if st.session_state.run_training:
                     "use_nas": use_nas,
                     "tfidf_max": tfidf_max,
                     "tfidf_ngrams": str(tfidf_ngrams),
+                    "data_source": active_data_source,
+                    "training_file": uploaded_training_file.name if uploaded_training_file is not None else "repository_default",
+                    "validation_file": uploaded_validation_file.name if uploaded_validation_file is not None else "auto_or_repository_default",
                     "train_rows": int(len(train_df)),
                     "val_rows": int(len(val_df)),
                 })
@@ -951,6 +1149,9 @@ if st.session_state.run_training:
                 dataset_profile = {
                     "train_rows": int(len(train_df)),
                     "val_rows": int(len(val_df)),
+                    "data_source": active_data_source,
+                    "training_file": uploaded_training_file.name if uploaded_training_file is not None else "repository_default",
+                    "validation_file": uploaded_validation_file.name if uploaded_validation_file is not None else "auto_or_repository_default",
                     "train_class_distribution": train_df["sentiment"].value_counts().to_dict(),
                     "val_class_distribution": val_df["sentiment"].value_counts().to_dict()
                 }
@@ -984,6 +1185,7 @@ if st.session_state.run_training:
                     "tfidf_max": tfidf_max,
                     "tfidf_ngrams": list(tfidf_ngrams),
                     "layer_strategy_map": layer_strategy_map,
+                    "data_source": active_data_source,
                     "best_score": float(pyramid.best_score),
                     "best_model_summary": {
                         "model": best_res.get("model"),
@@ -1136,7 +1338,14 @@ else:
     # Data Preview Section
     st.markdown("<h2 class='sub-header'>Data Overview</h2>", unsafe_allow_html=True)
     try:
-        train_df, val_df = load_data(subsample_train=subsample_size, subsample_val=subsample_size // 4 if subsample_size > 0 else 0)
+        train_df, val_df, active_data_source = load_runtime_data(
+            source_mode=data_source_mode,
+            training_file=uploaded_training_file,
+            validation_file=uploaded_validation_file,
+            subsample_size=subsample_size,
+            validation_split_pct=validation_split_pct,
+        )
+        st.caption(f"Active data source: {active_data_source}")
         
         col1, col2 = st.columns(2)
         with col1:
