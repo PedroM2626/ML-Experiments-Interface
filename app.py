@@ -61,10 +61,10 @@ WORKSPACES: Dict[str, dict] = {
             "Experimento de ensemble hierarquico com visualizacao das camadas, "
             "metricas ao vivo e configuracao flexivel para NLP de sentimento."
         ),
-        "folder": ROOT_DIR,
-        "script": ROOT_DIR / "flexible_ensemble_pyramid_ui_enhanced.py",
+        "folder": ROOT_DIR / "Flexible Ensemble Pyramid",
+        "script": ROOT_DIR / "Flexible Ensemble Pyramid" / "flexible_ensemble_pyramid_ui_enhanced.py",
         "port": 8504,
-        "command": 'streamlit run "flexible_ensemble_pyramid_ui_enhanced.py"',
+        "command": 'streamlit run "Flexible Ensemble Pyramid/flexible_ensemble_pyramid_ui_enhanced.py"',
         "requirements": None,
         "highlights": [
             "Visualizacao interativa da piramide e das conexoes entre modelos",

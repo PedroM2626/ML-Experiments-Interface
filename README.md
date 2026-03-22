@@ -2,7 +2,7 @@
 
 Repositório que agrupa 3 projetos de Machine Learning com interface em Streamlit:
 
-- `MLine`: plataforma AutoML com gerenciamento de experimentos, MLflow, relatórios e suporte a tabular, NLP e séries temporais.
+- `MLine`: plataforma AutoML inspirada em IBM watsonx, com gerenciamento de experimentos, MLflow, relatórios e suporte a tabular, NLP e séries temporais.
 - `sagemaker based`: studio no-code inspirado em AWS SageMaker Canvas para datasets, build, modelos e predições.
 - `Flexible Ensemble Pyramid`: experimento de ensemble hierárquico com foco em NLP de sentimento e visualização das camadas do ensemble.
 
@@ -21,13 +21,15 @@ Além dos projetos individuais, este repositório agora possui um hub unificado 
 ML-Experiment-Projects/
 |-- app.py
 |-- README.md
-|-- flexible_ensemble_pyramid.py
-|-- flexible_ensemble_pyramid_ui_enhanced.py
 |-- MLine/
 |   |-- app.py
 |   |-- requirements.txt
 |   |-- src/
 |   |-- tests/
+|-- Flexible Ensemble Pyramid/
+|   |-- flexible_ensemble_pyramid.py
+|   |-- flexible_ensemble_pyramid_ui_enhanced.py
+|   |-- README.md
 |-- sagemaker based/
 |   |-- app.py
 |   |-- requirements.txt
@@ -40,7 +42,7 @@ ML-Experiment-Projects/
 
 ### 1. MLine
 
-Projeto de AutoML com experiência inspirada no IBM watsonx.
+Projeto de AutoML com experiência inspirada diretamente no IBM watsonx AutoAI.
 
 Principais pontos:
 
@@ -53,7 +55,7 @@ Pasta: `MLine/`
 
 Entrada direta: `MLine/app.py`
 
-### 2. AutoML Studio
+### 2. MLaker
 
 Projeto inspirado em SageMaker Canvas com foco em fluxo no-code.
 
@@ -79,10 +81,14 @@ Principais pontos:
 - integração com MLflow;
 - configuração de RL meta-learner e NAS opcional.
 
+Pasta principal:
+
+- `Flexible Ensemble Pyramid/`
+
 Arquivos principais:
 
-- `flexible_ensemble_pyramid.py`
-- `flexible_ensemble_pyramid_ui_enhanced.py`
+- `Flexible Ensemble Pyramid/flexible_ensemble_pyramid.py`
+- `Flexible Ensemble Pyramid/flexible_ensemble_pyramid_ui_enhanced.py`
 
 ## Novo hub unificado
 
@@ -123,7 +129,7 @@ Se quiser abrir algum projeto fora do hub:
 ```bash
 streamlit run "MLine/app.py"
 streamlit run "sagemaker based/app.py"
-streamlit run "flexible_ensemble_pyramid_ui_enhanced.py"
+streamlit run "Flexible Ensemble Pyramid/flexible_ensemble_pyramid_ui_enhanced.py"
 ```
 
 ## Instalação recomendada
