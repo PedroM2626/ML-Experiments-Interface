@@ -21,7 +21,8 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.linear_model import LogisticRegression, RidgeClassifier
 from sklearn.svm import LinearSVC
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, BaggingClassifier
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, BaggingClassifier, AdaBoostClassifier
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.model_selection import cross_val_predict, StratifiedKFold
 
@@ -30,6 +31,21 @@ from sklearn.model_selection import cross_val_predict, StratifiedKFold
 import random
 
 warnings.filterwarnings("ignore")
+
+try:
+    from xgboost import XGBClassifier  # type: ignore
+except Exception:
+    XGBClassifier = None
+
+try:
+    from lightgbm import LGBMClassifier  # type: ignore
+except Exception:
+    LGBMClassifier = None
+
+try:
+    from catboost import CatBoostClassifier  # type: ignore
+except Exception:
+    CatBoostClassifier = None
 
 try:
     import mlflow  # type: ignore
@@ -104,6 +120,22 @@ HOMOGENEOUS_MODEL = "lr"
 HOMOGENEOUS_VARIANTS = 4
 
 
+def get_available_base_models() -> List[str]:
+    models = ["lr", "svc", "nb", "ridge", "rf", "et", "ada"]
+    if XGBClassifier is not None:
+        models.append("xgb")
+    if LGBMClassifier is not None:
+        models.append("lgbm")
+    if CatBoostClassifier is not None:
+        models.append("catboost")
+    return models
+
+
+BASE_MODEL_TYPES = get_available_base_models()
+META_MODEL_TYPES = ["stack_prev", "bag_prev", "vote_prev", "boost_prev"]
+BAGGING_MODEL_TYPES = [f"bag_{m}" for m in BASE_MODEL_TYPES]
+
+
 
 # ─── Setup Setup Tracking ─────────────────────────────────────────────────────
 def setup_tracking():
@@ -140,16 +172,41 @@ def clean_tweet(text: str) -> str:
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-def load_data(subsample_train=0, subsample_val=0):
-    base_path = Path("experiments/senti-pred-variations/logistic-senti-pred/data/raw")
-    cols = ['tweet_id', 'entity', 'sentiment', 'text']
-    train_file = base_path / "twitter_training.csv"
-    val_file = base_path / "twitter_validation.csv"
-    
-    if not train_file.exists():
-        base_path = Path(__file__).parent / "senti-pred-variations/logistic-senti-pred/data/raw"
+
+def _resolve_default_dataset_files() -> Tuple[Path, Path]:
+    """Resolve default training/validation CSV paths from this project only."""
+    def _as_relative(p: Path) -> str:
+        try:
+            return str(p.relative_to(Path.cwd()))
+        except Exception:
+            try:
+                return os.path.relpath(str(p), str(Path.cwd()))
+            except Exception:
+                return str(p)
+
+    candidates = [
+        Path(__file__).parent / "data/raw",
+        Path("Flexible Ensemble Pyramid/data/raw"),
+        Path("data/raw"),
+    ]
+
+    for base_path in candidates:
         train_file = base_path / "twitter_training.csv"
         val_file = base_path / "twitter_validation.csv"
+        if train_file.exists() and val_file.exists():
+            return train_file, val_file
+
+    searched = "\n".join([f"- {_as_relative(p)}" for p in candidates])
+    raise FileNotFoundError(
+        "Dataset padrão não encontrado no projeto. Arquivos esperados: twitter_training.csv e "
+        "twitter_validation.csv. Caminhos verificados:\n"
+        f"{searched}\n"
+        "Use a opção de upload de CSV no app Streamlit ou coloque os arquivos em data/raw deste projeto."
+    )
+
+def load_data(subsample_train=0, subsample_val=0):
+    cols = ['tweet_id', 'entity', 'sentiment', 'text']
+    train_file, val_file = _resolve_default_dataset_files()
 
     train_df = pd.read_csv(train_file, names=cols, header=None)
     val_df = pd.read_csv(val_file, names=cols, header=None)
@@ -179,6 +236,7 @@ def get_model(model_type, seed=SEED, jitter=False, n_jobs=2, variant_scale=1.0):
     j_c = np.random.uniform(0.5, 20.0) if jitter else 1.0
     j_tree = np.random.randint(50, 200) if jitter else 100
     j_alpha = np.random.uniform(0.01, 1.0) if jitter else 1.0
+    j_lr = np.random.uniform(0.03, 0.40) if jitter else 0.1
 
     if base_type == "lr":
         m = LogisticRegression(C=max(0.01, (11.0 * j_c if jitter else 11.0) * variant_scale), max_iter=1000, random_state=seed, n_jobs=n_jobs)
@@ -192,6 +250,46 @@ def get_model(model_type, seed=SEED, jitter=False, n_jobs=2, variant_scale=1.0):
         m = ExtraTreesClassifier(n_estimators=max(20, int(j_tree * variant_scale)), random_state=seed, n_jobs=n_jobs)
     elif base_type == "ridge":
         m = CalibratedClassifierCV(RidgeClassifier(alpha=max(0.01, (1.0 * j_alpha if jitter else 1.0) * variant_scale)), cv=2, n_jobs=n_jobs)
+    elif base_type == "ada":
+        m = AdaBoostClassifier(
+            estimator=DecisionTreeClassifier(max_depth=1, random_state=seed),
+            n_estimators=max(30, int(j_tree * variant_scale)),
+            learning_rate=max(0.01, j_lr * variant_scale),
+            random_state=seed
+        )
+    elif base_type == "xgb" and XGBClassifier is not None:
+        m = XGBClassifier(
+            n_estimators=max(40, int(j_tree * variant_scale)),
+            learning_rate=max(0.01, j_lr * variant_scale),
+            max_depth=max(3, int(6 * variant_scale)),
+            subsample=0.9,
+            colsample_bytree=0.9,
+            objective="multi:softprob",
+            eval_metric="mlogloss",
+            tree_method="hist",
+            random_state=seed,
+            n_jobs=n_jobs,
+            verbosity=0
+        )
+    elif base_type == "lgbm" and LGBMClassifier is not None:
+        m = LGBMClassifier(
+            n_estimators=max(40, int(j_tree * variant_scale)),
+            learning_rate=max(0.01, j_lr * variant_scale),
+            max_depth=max(3, int(8 * variant_scale)),
+            random_state=seed,
+            n_jobs=n_jobs,
+            verbose=-1
+        )
+    elif base_type == "catboost" and CatBoostClassifier is not None:
+        m = CatBoostClassifier(
+            iterations=max(40, int(j_tree * variant_scale)),
+            learning_rate=max(0.01, j_lr * variant_scale),
+            depth=max(4, int(8 * variant_scale)),
+            random_seed=seed,
+            verbose=False,
+            allow_writing_files=False,
+            thread_count=n_jobs
+        )
     else:
         m = LogisticRegression(random_state=seed, n_jobs=n_jobs)
     
@@ -217,7 +315,9 @@ def _extract_model_hyperparams(model):
             allowed = {
                 "C", "alpha", "max_iter", "n_estimators", "random_state", "n_jobs",
                 "cv", "penalty", "solver", "fit_intercept", "class_weight",
-                "max_depth", "min_samples_split", "min_samples_leaf"
+                "max_depth", "min_samples_split", "min_samples_leaf", "learning_rate",
+                "objective", "tree_method", "subsample", "colsample_bytree",
+                "depth", "iterations", "thread_count"
             }
             out = {}
             for k, val in params.items():
@@ -385,8 +485,8 @@ class NASController:
             "model_types": []
         }
         
-        base_models = ["lr", "svc", "nb", "ridge", "rf", "et"]
-        ensemble_models = ["bag_lr", "bag_svc", "bag_nb"]
+        base_models = list(BASE_MODEL_TYPES)
+        ensemble_models = list(BAGGING_MODEL_TYPES)
         strategies = ["dense", "residual", "simple"]
         
         for layer in range(num_layers):
@@ -434,8 +534,8 @@ class NASController:
                 mutated["layers"] -= 1
             elif len(mutated["models_per_layer"]) < 8:
                 # Add layer
-                base_models = ["lr", "svc", "nb", "ridge", "rf", "et"]
-                ensemble_models = ["bag_lr", "bag_svc", "bag_nb"]
+                base_models = list(BASE_MODEL_TYPES)
+                ensemble_models = list(BAGGING_MODEL_TYPES)
                 strategies = ["dense", "residual", "simple"]
                 
                 # Logic for new layer position
@@ -455,8 +555,8 @@ class NASController:
             # Mutate models in a random layer
             if mutated["models_per_layer"]:
                 layer_idx = np.random.randint(len(mutated["models_per_layer"]))
-                base_models = ["lr", "svc", "nb", "ridge", "rf", "et"]
-                ensemble_models = ["bag_lr", "bag_svc", "bag_nb"]
+                base_models = list(BASE_MODEL_TYPES)
+                ensemble_models = list(BAGGING_MODEL_TYPES)
                 current_pool = base_models if layer_idx == 0 else (base_models + ensemble_models)
                 
                 n_models = np.random.randint(2, 5)
@@ -685,6 +785,70 @@ class _PreviousLayerBaggingVoting:
         return np.argmax(self.predict_proba(X), axis=1)
 
 
+class _PreviousLayerBoostingVoting:
+    """Boosting over previous-layer model outputs using SAMME-style weights."""
+    def __init__(self, n_models, n_classes, max_rounds=None, seed=SEED):
+        self.n_models = n_models
+        self.n_classes = n_classes
+        self.max_rounds = max_rounds if max_rounds is not None else n_models
+        self.seed = seed
+        self.selected_indices = []
+        self.alphas = []
+
+    def fit(self, X, y):
+        probs = np.asarray(X).reshape(X.shape[0], self.n_models, self.n_classes)
+        model_preds = np.argmax(probs, axis=2)
+        n_samples = model_preds.shape[0]
+
+        if n_samples == 0:
+            return self
+
+        sample_weights = np.full(n_samples, 1.0 / n_samples)
+        rounds = min(self.max_rounds, self.n_models)
+
+        for _ in range(rounds):
+            best_model_idx = None
+            best_error = None
+            for m_idx in range(self.n_models):
+                incorrect = (model_preds[:, m_idx] != y)
+                err = np.sum(sample_weights * incorrect)
+                if best_error is None or err < best_error:
+                    best_error = float(err)
+                    best_model_idx = m_idx
+
+            if best_model_idx is None:
+                break
+
+            err = min(max(best_error, 1e-8), 1 - (1.0 / max(self.n_classes, 2)) - 1e-8)
+            alpha = np.log((1.0 - err) / err) + np.log(max(self.n_classes - 1, 1))
+
+            self.selected_indices.append(int(best_model_idx))
+            self.alphas.append(float(alpha))
+
+            misclassified = (model_preds[:, best_model_idx] != y)
+            sample_weights *= np.exp(alpha * misclassified)
+            sample_weights_sum = sample_weights.sum()
+            if sample_weights_sum <= 0:
+                break
+            sample_weights /= sample_weights_sum
+
+        return self
+
+    def predict_proba(self, X):
+        probs = np.asarray(X).reshape(X.shape[0], self.n_models, self.n_classes)
+        if not self.selected_indices:
+            return probs.mean(axis=1)
+
+        alpha_sum = max(float(np.sum(self.alphas)), 1e-8)
+        out = np.zeros((probs.shape[0], self.n_classes), dtype=float)
+        for idx, alpha in zip(self.selected_indices, self.alphas):
+            out += alpha * probs[:, idx, :]
+        return out / alpha_sum
+
+    def predict(self, X):
+        return np.argmax(self.predict_proba(X), axis=1)
+
+
 # ─── Pyramid Logic ────────────────────────────────────────────────────────────
 class PyramidEnsemble:
     def __init__(self, num_layers=3, seed=SEED, meta_learner=None, patience=PATIENCE, 
@@ -821,8 +985,8 @@ class PyramidEnsemble:
             
             # Base pool: Layer 1 should only have simple base models to build the foundation
             # Subsequent layers only use ensembles built from previous-layer outputs
-            avail_base = ["lr", "svc", "nb", "ridge", "rf", "et"]
-            avail_meta = ["stack_prev", "bag_prev", "vote_prev"]
+            avail_base = list(BASE_MODEL_TYPES)
+            avail_meta = list(META_MODEL_TYPES)
             
             pool = avail_base if l == 1 else avail_meta
             effective_min = max(1, min(self.min_models, len(pool)))
@@ -855,7 +1019,7 @@ class PyramidEnsemble:
                 "strategy": current_strategy,
                 "layer_type": self.layer_type if l == 1 else "meta_ensemble",
                 "source_previous_layer_models": list(prev_layer_model_names),
-                "input_features": int(layer_train_input.shape[1]) if l > 1 and hasattr(prev_layer_train_stack, "shape") else (int(current_X_train.shape[1]) if hasattr(current_X_train, "shape") else None)
+                "input_features": int(prev_layer_train_stack.shape[1]) if l > 1 and hasattr(prev_layer_train_stack, "shape") else (int(current_X_train.shape[1]) if hasattr(current_X_train, "shape") else None)
             }
             self.training_metadata["layers"].append(layer_metadata)
             if callable(progress_callback):
@@ -895,6 +1059,12 @@ class PyramidEnsemble:
                         model = LogisticRegression(max_iter=1000, random_state=model_seed, n_jobs=self.n_jobs)
                     elif m_type == "bag_prev":
                         model = _PreviousLayerBaggingVoting(
+                            n_models=n_prev_models,
+                            n_classes=n_classes,
+                            seed=model_seed
+                        )
+                    elif m_type == "boost_prev":
+                        model = _PreviousLayerBoostingVoting(
                             n_models=n_prev_models,
                             n_classes=n_classes,
                             seed=model_seed
@@ -1105,7 +1275,7 @@ def main():
     parser.add_argument("--jitter", type=bool, default=JITTER)
     parser.add_argument("--strategy", type=str, choices=["dense", "residual", "simple"], default=STRATEGY)
     parser.add_argument("--layer_type", type=str, choices=["heterogeneous", "homogeneous"], default=PYRAMID_LAYER_TYPE)
-    parser.add_argument("--homogeneous_model", type=str, choices=["lr", "svc", "nb", "ridge", "rf", "et"], default=HOMOGENEOUS_MODEL)
+    parser.add_argument("--homogeneous_model", type=str, choices=BASE_MODEL_TYPES, default=HOMOGENEOUS_MODEL)
     parser.add_argument("--homogeneous_variants", type=int, default=HOMOGENEOUS_VARIANTS)
     parser.add_argument("--subsample_train", type=int, default=0, help="Number of training samples (0=all)")
     parser.add_argument("--subsample_val", type=int, default=0, help="Number of validation samples (0=all)")

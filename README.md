@@ -77,6 +77,8 @@ Projeto experimental voltado a ensemble hierárquico para NLP.
 Principais pontos:
 
 - múltiplas camadas de modelos com estratégias diferentes;
+- ensembles com bagging, voting, stacking e boosting;
+- modelos adicionais de árvore/boosting (AdaBoost, XGBoost, LightGBM, CatBoost, Extra Trees);
 - visualização da pirâmide, conexões e heatmaps;
 - integração com MLflow;
 - configuração de RL meta-learner e NAS opcional.
@@ -156,6 +158,9 @@ Dependências opcionais do projeto da pirâmide:
 
 - `mlflow`
 - `dagshub`
+- `xgboost`
+- `lightgbm`
+- `catboost`
 
 Se elas não estiverem instaladas, parte do tracking pode cair para modo simplificado.
 

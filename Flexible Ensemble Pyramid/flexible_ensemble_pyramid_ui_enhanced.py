@@ -18,7 +18,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
 # Add the project root to the path so the local module can be imported reliably.
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 try:
@@ -45,6 +45,8 @@ try:
         PYRAMID_LAYER_TYPE,
         HOMOGENEOUS_MODEL,
         HOMOGENEOUS_VARIANTS,
+        BASE_MODEL_TYPES,
+        META_MODEL_TYPES,
         mlflow
     )
 except ImportError:
@@ -73,6 +75,8 @@ except ImportError:
             PYRAMID_LAYER_TYPE,
             HOMOGENEOUS_MODEL,
             HOMOGENEOUS_VARIANTS,
+            BASE_MODEL_TYPES,
+            META_MODEL_TYPES,
             mlflow
         )
     except ImportError:
@@ -260,6 +264,8 @@ with st.sidebar:
                           help="Número máximo de modelos por camada")
     epsilon_rl = st.slider("Taxa de Exploração RL", 0.0, 1.0, 0.2, 0.05,
                           help="Reinforcement learning exploration rate")
+    st.caption(f"Modelos base disponíveis: {', '.join(BASE_MODEL_TYPES)}")
+    st.caption(f"Meta-ensembles disponíveis: {', '.join(META_MODEL_TYPES)}")
     
     # Feature engineering
     st.markdown("<h3 style='color: #6c757d;'>Engenharia de Features</h3>", unsafe_allow_html=True)
@@ -287,8 +293,8 @@ with st.sidebar:
     )
     homogeneous_model = st.selectbox(
         "Modelo Base Homogêneo",
-        ["lr", "svc", "nb", "ridge", "rf", "et"],
-        index=["lr", "svc", "nb", "ridge", "rf", "et"].index(HOMOGENEOUS_MODEL),
+        BASE_MODEL_TYPES,
+        index=BASE_MODEL_TYPES.index(HOMOGENEOUS_MODEL) if HOMOGENEOUS_MODEL in BASE_MODEL_TYPES else 0,
         disabled=(layer_type != "homogeneous"),
         help="Modelo único usado quando Pyramid Layer Type = homogeneous."
     )
@@ -463,8 +469,11 @@ def create_enhanced_ensemble_visualization(results, pyramid, show_connections=Tr
     model_colors = {
         'lr': '#1f77b4', 'svc': '#ff7f0e', 'nb': '#2ca02c',
         'rf': '#d62728', 'et': '#9467bd', 'ridge': '#8c564b',
+        'ada': '#f59e0b', 'xgb': '#ef4444', 'lgbm': '#10b981', 'catboost': '#6366f1',
         'bag_lr': '#e377c2', 'bag_svc': '#7f7f7f', 'bag_nb': '#bcbd22',
-        'voting': '#111827', 'stack_prev': '#0ea5e9', 'bag_prev': '#a855f7', 'vote_prev': '#16a34a'
+        'bag_ada': '#f97316', 'bag_xgb': '#dc2626', 'bag_lgbm': '#059669', 'bag_catboost': '#4f46e5',
+        'voting': '#111827', 'stack_prev': '#0ea5e9', 'bag_prev': '#a855f7', 'vote_prev': '#16a34a',
+        'boost_prev': '#f97316'
     }
     present_model_types = set()
     
@@ -505,13 +514,22 @@ def create_enhanced_ensemble_visualization(results, pyramid, show_connections=Tr
         "rf": "Random Forest",
         "et": "Extra Trees",
         "ridge": "Ridge Classifier calibrado",
+        "ada": "AdaBoost",
+        "xgb": "XGBoost",
+        "lgbm": "LightGBM",
+        "catboost": "CatBoost",
         "bag_lr": "Bagging de Logistic Regression",
         "bag_svc": "Bagging de Linear SVC calibrado",
         "bag_nb": "Bagging de Multinomial Naive Bayes",
+        "bag_ada": "Bagging de AdaBoost",
+        "bag_xgb": "Bagging de XGBoost",
+        "bag_lgbm": "Bagging de LightGBM",
+        "bag_catboost": "Bagging de CatBoost",
         "voting": "Voting por camada",
         "stack_prev": "Stacking da camada anterior",
         "bag_prev": "Bagging sobre saídas da camada anterior",
-        "vote_prev": "Voting sobre saídas da camada anterior"
+        "vote_prev": "Voting sobre saídas da camada anterior",
+        "boost_prev": "Boosting sobre saídas da camada anterior"
     }
 
     # Add nodes (models) with enhanced styling
@@ -537,6 +555,9 @@ def create_enhanced_ensemble_visualization(results, pyramid, show_connections=Tr
                 composed_models = "Modelos da camada anterior"
             elif base_model == "vote_prev":
                 model_details = "Votação das predições da camada anterior"
+                composed_models = "Modelos da camada anterior"
+            elif base_model == "boost_prev":
+                model_details = "Boosting das predições da camada anterior com pesos adaptativos"
                 composed_models = "Modelos da camada anterior"
             elif base_model == "voting":
                 model_details = "Composto por votação dos modelos da própria camada"
@@ -599,13 +620,22 @@ def create_enhanced_ensemble_visualization(results, pyramid, show_connections=Tr
         "rf": "RF",
         "et": "ET",
         "ridge": "Ridge",
+        "ada": "Ada",
+        "xgb": "XGB",
+        "lgbm": "LGBM",
+        "catboost": "Cat",
         "bag_lr": "Bag LR",
         "bag_svc": "Bag SVC",
         "bag_nb": "Bag NB",
+        "bag_ada": "Bag Ada",
+        "bag_xgb": "Bag XGB",
+        "bag_lgbm": "Bag LGBM",
+        "bag_catboost": "Bag Cat",
         "voting": "Voting",
         "stack_prev": "Stack Prev",
         "bag_prev": "Bag Prev",
-        "vote_prev": "Vote Prev"
+        "vote_prev": "Vote Prev",
+        "boost_prev": "Boost Prev"
     }
     for model_type in sorted(present_model_types):
         fig.add_trace(go.Scatter(
@@ -713,10 +743,10 @@ def create_enhanced_ensemble_visualization(results, pyramid, show_connections=Tr
         ),
         height=dynamic_height,
         margin=dict(l=40, r=220, t=170, b=80),
-        template="plotly_white",
+        template="plotly",
         font=dict(color="#111827"),
-        plot_bgcolor='rgba(255,255,255,1)',
-        paper_bgcolor='rgba(255,255,255,1)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
         legend=dict(
             x=0.01,
             y=0.90,
@@ -809,19 +839,36 @@ def create_node_details_dataframe(results, layer_strategy_map=None):
         "rf": "Random Forest",
         "et": "Extra Trees",
         "ridge": "Ridge Classifier calibrado",
+        "ada": "AdaBoost",
+        "xgb": "XGBoost",
+        "lgbm": "LightGBM",
+        "catboost": "CatBoost",
         "bag_lr": "Bagging(Logistic Regression)",
         "bag_svc": "Bagging(Linear SVC calibrado)",
         "bag_nb": "Bagging(Multinomial Naive Bayes)",
+        "bag_ada": "Bagging(AdaBoost)",
+        "bag_xgb": "Bagging(XGBoost)",
+        "bag_lgbm": "Bagging(LightGBM)",
+        "bag_catboost": "Bagging(CatBoost)",
         "voting": "Voting por camada",
         "stack_prev": "Stacking da camada anterior",
         "bag_prev": "Bagging da camada anterior",
-        "vote_prev": "Voting da camada anterior"
+        "vote_prev": "Voting da camada anterior",
+        "boost_prev": "Boosting da camada anterior"
     }
     df["descrição"] = df["model_family"].map(model_description_map).fillna(df["model_family"])
     df["tipo"] = np.where(
         df["model_family"].str.startswith("bag_"),
         "Ensemble Bagging",
-        np.where(df["model_family"].isin(["voting", "vote_prev"]), "Ensemble Voting", np.where(df["model_family"].eq("stack_prev"), "Ensemble Stacking", "Modelo Base"))
+        np.where(
+            df["model_family"].isin(["voting", "vote_prev"]),
+            "Ensemble Voting",
+            np.where(
+                df["model_family"].eq("stack_prev"),
+                "Ensemble Stacking",
+                np.where(df["model_family"].eq("boost_prev"), "Ensemble Boosting", "Modelo Base")
+            )
+        )
     )
     if isinstance(layer_strategy_map, dict):
         df["estratégia_camada"] = df["layer"].map(layer_strategy_map).fillna("n/a")
@@ -1252,7 +1299,14 @@ if st.session_state.run_training:
             progress_bar.progress(1.0)
 
         except Exception as e:
-            st.error(f"Error during training: {str(e)}")
+            if isinstance(e, FileNotFoundError):
+                st.error(
+                    "Dataset padrão não encontrado no repositório local. "
+                    "Selecione 'Upload CSV proprio' na barra lateral e envie os arquivos com colunas 'text' e 'sentiment'."
+                )
+                st.info(str(e))
+            else:
+                st.error(f"Error during training: {str(e)}")
             st.session_state.run_training = False
 
 # Display results
