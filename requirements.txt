@@ -1,0 +1,48 @@
+# ML-Experiment-Projects — ambiente unificado (hub + 3 workspaces)
+# Uso: pip install -r requirements.txt
+# Para dependências pesadas/opcionais, veja a seção final.
+
+# ── Hub + base ─────────────────────────────────────────────
+streamlit>=1.42.2
+pandas>=2.2.3
+numpy>=1.26.4
+scikit-learn>=1.6.1
+plotly>=6.0.0
+matplotlib>=3.10.0
+seaborn>=0.13.2
+joblib>=1.4.0
+python-dotenv>=1.0.1
+pyarrow>=19.0.1
+openpyxl>=3.1.5
+Pillow>=10.0.0
+scipy>=1.11.0
+pytest>=8.3.4
+
+# ── MLOps / tracking ───────────────────────────────────────
+mlflow>=2.21.1
+
+# ── MLine (AutoML) ─────────────────────────────────────────
+optuna>=4.2.0
+xgboost>=2.1.0
+lightgbm>=4.6.0
+shap>=0.46.0
+statsmodels>=0.14.0
+jinja2>=3.1.0
+skl2onnx>=1.17.0
+fpdf2>=2.8.0
+nltk>=3.8.0
+
+# ── AutoML Studio (sagemaker based) ────────────────────────
+autogluon.tabular>=1.2.0
+flaml>=2.3.4
+
+# ── Flexible Ensemble Pyramid (núcleo; resto é opcional) ──
+# catboost é opcional — o código faz fallback se ausente.
+catboost>=1.2.0; python_version < "3.13"
+# dagshub é opcional — tracking remoto alternativo ao MLflow local.
+# dagshub>=0.6.0
+
+# ── Opcionais pesados (instale só se for usar) ─────────────
+# tensorflow>=2.15.0; python_version < "3.13"
+# torch>=2.0.0
+# dagshub>=0.6.0

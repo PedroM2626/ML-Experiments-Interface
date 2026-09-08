@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import os
+import shutil
+import socket
 import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
@@ -16,6 +18,7 @@ import streamlit.components.v1 as components
 
 ROOT_DIR = Path(__file__).resolve().parent
 LOG_DIR = ROOT_DIR / ".hub" / "logs"
+HUB_VERSION = "1.1.0"
 
 WORKSPACES: Dict[str, dict] = {
     "mline": {
@@ -365,6 +368,119 @@ def workspace_is_live(workspace_key: str, timeout: float = 1.2) -> bool:
         return False
 
 
+def is_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
+    """Best-effort check: True if something already listens on host:port."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.5)
+        return sock.connect_ex((host, port)) == 0
+
+
+def get_workspace_health(workspace_key: str, timeout: float = 1.2) -> dict:
+    """Detailed health check: liveness + latency + port-conflict hint."""
+    spec = WORKSPACES[workspace_key]
+    port = int(spec["port"])
+    started = time.perf_counter()
+    live = workspace_is_live(workspace_key, timeout=timeout)
+    latency_ms = int((time.perf_counter() - started) * 1000)
+    port_busy = is_port_in_use(port)
+
+    if live:
+        status, hint = "running", f"Respondendo em ~{latency_ms} ms."
+    elif port_busy:
+        status, hint = (
+            "port-conflict",
+            f"Porta {port} ocupada por outro processo, mas o workspace não respondeu. "
+            "Pare o processo conflitante ou troque a porta.",
+        )
+    else:
+        status, hint = "stopped", "Workspace parado. Use Iniciar."
+    return {
+        "status": status,
+        "live": live,
+        "port_in_use": port_busy,
+        "latency_ms": latency_ms,
+        "hint": hint,
+    }
+
+
+def stop_workspace(workspace_key: str) -> Tuple[bool, str]:
+    """Best-effort stop of whatever listens on the workspace port.
+
+    No new dependency (no psutil): uses netstat/taskkill on Windows
+    and fuser/lsof+kill on POSIX. Returns (ok, message).
+    """
+    spec = WORKSPACES[workspace_key]
+    port = int(spec["port"])
+    if not is_port_in_use(port):
+        return True, f"Nada ouvindo na porta {port}."
+
+    try:
+        if os.name == "nt":
+            # Find PIDs listening on the port, then kill them.
+            netstat = shutil.which("netstat")
+            taskkill = shutil.which("taskkill")
+            if not netstat or not taskkill:
+                return False, "netstat/taskkill não encontrados; pare o processo manualmente."
+            out = subprocess.run(
+                [netstat, "-ano"], capture_output=True, text=True, timeout=15
+            )
+            pids = set()
+            for line in out.stdout.splitlines():
+                if f":{port}" in line and "LISTENING" in line:
+                    parts = line.strip().split()
+                    if parts:
+                        pid = parts[-1]
+                        if pid.isdigit() and int(pid) > 0:
+                            pids.add(pid)
+            if not pids:
+                return False, f"Porta {port} ocupada, mas PID não identificado."
+            killed = []
+            for pid in sorted(pids):
+                res = subprocess.run(
+                    [taskkill, "/F", "/PID", pid],
+                    capture_output=True, text=True, timeout=15,
+                )
+                if res.returncode == 0:
+                    killed.append(pid)
+            if killed:
+                time.sleep(1.0)
+                return True, f"Processo(s) {', '.join(killed)} finalizado(s) na porta {port}."
+            return False, f"Falha ao finalizar PID(s) {', '.join(sorted(pids))}."
+        else:
+            fuser = shutil.which("fuser")
+            if fuser:
+                res = subprocess.run(
+                    [fuser, "-k", f"{port}/tcp"],
+                    capture_output=True, text=True, timeout=15,
+                )
+                time.sleep(1.0)
+                if not is_port_in_use(port):
+                    return True, f"Processo na porta {port} finalizado (fuser)."
+                return False, res.stderr.strip() or f"Falha ao liberar porta {port}."
+            lsof = shutil.which("lsof")
+            kill = shutil.which("kill")
+            if lsof and kill:
+                out = subprocess.run(
+                    [lsof, "-ti", f":{port}"], capture_output=True, text=True, timeout=15
+                )
+                pids = [p.strip() for p in out.stdout.split() if p.strip().isdigit()]
+                for pid in pids:
+                    subprocess.run([kill, pid], timeout=10)
+                time.sleep(1.0)
+                if not is_port_in_use(port):
+                    return True, f"Processo(s) {', '.join(pids)} finalizado(s)."
+                return False, f"Falha ao liberar porta {port}."
+            return False, "fuser/lsof não encontrados; pare o processo manualmente."
+    except Exception as exc:  # noqa: BLE001 - best-effort helper
+        return False, f"Erro ao parar workspace: {exc}"
+
+
+def clear_workspace_log(workspace_key: str) -> None:
+    path = log_path(workspace_key)
+    if path.exists():
+        path.write_text("", encoding="utf-8")
+
+
 def launch_workspace(workspace_key: str, wait_seconds: int = 45) -> bool:
     if workspace_is_live(workspace_key):
         return True
@@ -373,9 +489,15 @@ def launch_workspace(workspace_key: str, wait_seconds: int = 45) -> bool:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     launch_log = log_path(workspace_key)
     handle = launch_log.open("a", encoding="utf-8")
+    port_busy = is_port_in_use(int(spec["port"]))
     handle.write(
         f"\n\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] Starting {spec['name']} on port {spec['port']}\n"
     )
+    if port_busy and not workspace_is_live(workspace_key):
+        handle.write(
+            f"WARNING: port {spec['port']} already in use by another process. "
+            "Startup may fail; use 'Parar workspace' first.\n"
+        )
     handle.flush()
 
     command = [
@@ -418,9 +540,20 @@ def launch_workspace(workspace_key: str, wait_seconds: int = 45) -> bool:
 
 
 def status_label(workspace_key: str) -> tuple[str, str]:
-    if workspace_is_live(workspace_key):
+    health = get_workspace_health(workspace_key)
+    if health["status"] == "running":
         return "Running", "hub-status hub-status-running"
+    if health["status"] == "port-conflict":
+        return "Port conflict", "hub-status hub-status-stopped"
     return "Stopped", "hub-status hub-status-stopped"
+
+
+def render_shared_footer() -> None:
+    st.divider()
+    st.caption(
+        f"ML Experiment Projects Hub v{HUB_VERSION} · raiz `app.py` apenas orquestra os workspaces · "
+        "logs em `.hub/logs/` (ignorado pelo git) · dependências em `requirements.txt`"
+    )
 
 
 def set_workspace(workspace_key: str) -> None:
@@ -453,12 +586,23 @@ def render_sidebar() -> str:
         active_count = sum(1 for key in WORKSPACE_ORDER if workspace_is_live(key))
         st.metric("Workspaces ativos", active_count)
         st.metric("Workspaces totais", len(WORKSPACE_ORDER))
+        auto_refresh = st.checkbox("Auto-atualizar status (10s)", value=False)
+        if auto_refresh:
+            refresher = getattr(st, "autorefresh", None) or getattr(
+                st, "experimental_autorefresh", None
+            )
+            if callable(refresher):
+                refresher(interval=10_000, key="hub_sidebar_autorefresh")
+            else:
+                st.caption("Auto-refresh não suportado nesta versão do Streamlit; use Atualizar.")
 
         st.divider()
         st.markdown("### Portas padrao")
         for key in WORKSPACE_ORDER:
             spec = WORKSPACES[key]
-            st.caption(f"{spec['name']}: {workspace_url(key)}")
+            health = get_workspace_health(key)
+            icon = "🟢" if health["live"] else ("🟠" if health["port_in_use"] else "⚪")
+            st.caption(f"{icon} {spec['name']}: {workspace_url(key)}")
 
         st.divider()
         st.markdown("### Dica")
@@ -550,6 +694,7 @@ def render_workspace(workspace_key: str) -> None:
     spec = WORKSPACES[workspace_key]
     url = workspace_url(workspace_key)
     status_text, status_class = status_label(workspace_key)
+    health = get_workspace_health(workspace_key)
 
     st.markdown(
         f"""
@@ -576,17 +721,39 @@ def render_workspace(workspace_key: str) -> None:
                 <div class="hub-inline-note">
                     Pasta: <span class="hub-code">{spec['folder']}</span><br>
                     Porta: <span class="hub-code">{url}</span><br>
-                    Comando direto: <span class="hub-code">{spec['command']}</span>
+                    Comando direto: <span class="hub-code">{spec['command']}</span><br>
+                    Diagnóstico: <span class="hub-code">{health['hint']}</span>
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
+        if health["status"] == "port-conflict":
+            st.warning(
+                f"A porta {spec['port']} parece ocupada por outro processo. "
+                "Use 'Parar workspace' para tentar liberar, ou suba o app manualmente em outra porta."
+            )
 
     with action_col:
         st.link_button("Abrir URL direta", url, use_container_width=True)
         if st.button("Atualizar status", key=f"refresh_{workspace_key}", use_container_width=True):
             st.rerun()
+        if st.button("Iniciar workspace", key=f"start_{workspace_key}", use_container_width=True):
+            with st.spinner(f"Iniciando {spec['name']}..."):
+                ok = launch_workspace(workspace_key)
+            st.toast("Workspace iniciado." if ok else "Falha ao iniciar; veja Logs.")
+            st.rerun()
+        if st.button("Reiniciar workspace", key=f"restart_{workspace_key}", use_container_width=True):
+            with st.spinner(f"Reiniciando {spec['name']}..."):
+                stop_workspace(workspace_key)
+                time.sleep(1.0)
+                ok = launch_workspace(workspace_key)
+            st.toast("Workspace reiniciado." if ok else "Falha ao reiniciar; veja Logs.")
+            st.rerun()
+        if st.button("Parar workspace", key=f"stop_{workspace_key}", use_container_width=True):
+            with st.spinner(f"Parando {spec['name']}..."):
+                ok, msg = stop_workspace(workspace_key)
+            (st.success if ok else st.error)(msg)
 
     tab_workspace, tab_guide, tab_logs = st.tabs(["Workspace", "Guia rapido", "Logs"])
 
@@ -632,6 +799,15 @@ def render_workspace(workspace_key: str) -> None:
             st.markdown("- Se voce enviar apenas o treino, a validacao e criada automaticamente por split.")
 
     with tab_logs:
+        st.caption(f"Arquivo: `{log_path(workspace_key)}`")
+        col_log1, col_log2 = st.columns(2)
+        with col_log1:
+            if st.button("Recarregar logs", key=f"logs_refresh_{workspace_key}", use_container_width=True):
+                st.rerun()
+        with col_log2:
+            if st.button("Limpar logs", key=f"logs_clear_{workspace_key}", use_container_width=True):
+                clear_workspace_log(workspace_key)
+                st.rerun()
         log_text = read_recent_log(workspace_key)
         if log_text:
             st.code(log_text, language="text")
@@ -644,8 +820,10 @@ def main() -> None:
     selected_workspace = render_sidebar()
     if selected_workspace == OVERVIEW_KEY:
         render_overview()
+        render_shared_footer()
         return
     render_workspace(selected_workspace)
+    render_shared_footer()
 
 
 if __name__ == "__main__":

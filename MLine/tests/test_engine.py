@@ -4,6 +4,8 @@ Unit tests for the AutoML engine and supporting modules.
 
 import pytest
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
 import numpy as np
 import queue

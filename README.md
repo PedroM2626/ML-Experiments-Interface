@@ -136,7 +136,7 @@ streamlit run "Flexible Ensemble Pyramid/flexible_ensemble_pyramid_ui_enhanced.p
 
 ## Instalação recomendada
 
-Como os projetos têm dependências diferentes, a forma mais simples é usar um ambiente virtual único e instalar os requisitos dos subprojetos.
+A forma mais simples é usar um ambiente virtual único com o `requirements.txt` da raiz (cobre hub + 3 workspaces).
 
 ### Windows PowerShell
 
@@ -144,25 +144,23 @@ Como os projetos têm dependências diferentes, a forma mais simples é usar um 
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install --upgrade pip
-pip install -r .\MLine\requirements.txt
-pip install -r ".\sagemaker based\requirements.txt"
+pip install -r requirements.txt
 ```
 
-Para o projeto da pirâmide, garanta pelo menos estas bibliotecas no mesmo ambiente:
+Se preferir instalar por subprojeto:
 
 ```powershell
-pip install streamlit pandas numpy scikit-learn matplotlib plotly seaborn joblib python-dotenv
+pip install -r .\MLine\requirements.txt
+pip install -r ".\sagemaker based\requirements.txt"
+pip install -r ".\Flexible Ensemble Pyramid\requirements.txt"
 ```
 
-Dependências opcionais do projeto da pirâmide:
+Dependências opcionais/pesadas (o código tem fallback se ausentes):
 
-- `mlflow`
-- `dagshub`
-- `xgboost`
-- `lightgbm`
-- `catboost`
-
-Se elas não estiverem instaladas, parte do tracking pode cair para modo simplificado.
+- `mlflow` / `dagshub` (tracking)
+- `xgboost`, `lightgbm`, `catboost` (modelos extras da pirâmide)
+- `tensorflow` (deep learning no MLine, cai para MLP do sklearn)
+- `autogluon.tabular`, `flaml` (já no requirements raiz; AutoGluon é pesado)
 
 ## Uso do Flexible Ensemble Pyramid com CSV próprio
 
@@ -193,17 +191,23 @@ Dependendo do projeto usado, o repositório pode gerar ou atualizar:
 
 ## Testes e validação
 
-Testes já existentes no repositório:
+Testes no repositório:
 
-- `MLine/tests/`
-- `sagemaker based/tests/`
+- `MLine/tests/` (engine + time series)
+- `sagemaker based/tests/` (sistema/config)
+- `Flexible Ensemble Pyramid/tests/` (smoke: factory de modelos, RL, NAS, limpeza de texto)
+
+Cada pasta tem `conftest.py` que ajusta `sys.path`, então dá para rodar da raiz. `pytest.ini` define os `testpaths`.
 
 Comandos úteis:
 
 ```bash
-pytest MLine/tests
-pytest "sagemaker based/tests"
+pytest
+pytest MLine/tests/test_time_series.py "Flexible Ensemble Pyramid/tests/test_pyramid_smoke.py" "sagemaker based/tests/test_system.py"
+streamlit --help
 ```
+
+CI mínimo em `.github/workflows/ci.yml` roda a coleta + testes rápidos + sanity do Streamlit.
 
 O hub da raiz é um orquestrador de interface. Ele não altera a lógica dos projetos filhos, apenas centraliza a execução e o acesso.
 
@@ -230,13 +234,15 @@ Use `Flexible Ensemble Pyramid` quando quiser:
 ## Observações importantes
 
 - O hub depende de `streamlit` instalado no ambiente atual.
-- Se uma porta já estiver ocupada, o hub pode não conseguir iniciar o workspace correspondente naquela porta.
+- O hub agora detecta porta ocupada (`port-conflict`), mostra latência/diagnóstico e tem botões Iniciar/Reiniciar/Parar + limpeza de logs na aba Logs.
 - Os projetos continuam independentes. O hub apenas os centraliza visualmente.
 - Alguns apps possuem dependências pesadas, especialmente os fluxos com AutoGluon, TensorFlow, SHAP e MLflow.
 
-## Próximos passos sugeridos
+## Próximos passos sugeridos (ainda abertos)
 
-- padronizar um `requirements.txt` raiz para o repositório inteiro;
-- adicionar health checks mais avançados para os workspaces filhos;
-- consolidar logs e configuração em uma camada comum;
-- criar uma navegação compartilhada para reduzir duplicação entre os apps.
+- [x] padronizar um `requirements.txt` raiz — feito (`requirements.txt` + `pytest.ini`)
+- [x] health checks mais avançados — feito (`get_workspace_health`, detecção de porta, latência)
+- [x] consolidar logs e configuração — parcial (logs centralizados em `.hub/logs/` com limpar/recarregar; falta config comum em código)
+- [x] navegação compartilhada — parcial (sidebar + footer compartilhados no hub; falta componente comum dentro dos 3 apps)
+- consolidar `MLine/exports/`, `mlruns/`, `experiments/artifacts/` com rotação de logs;
+- quebrar `flexible_ensemble_pyramid.py` (~1440 linhas) em módulos `models/`, `nas/`, `tracking/`.

@@ -1,0 +1,53 @@
+{
+    "runs": 1,
+    "layer_stats": {
+        "1": {
+            "et": {
+                "count": 1,
+                "avg_f1": 0.6355532168998456,
+                "avg_accuracy": 0.64,
+                "avg_precision": 0.6483733498116954,
+                "avg_recall": 0.64
+            },
+            "lr": {
+                "count": 1,
+                "avg_f1": 0.6180079056743486,
+                "avg_accuracy": 0.622,
+                "avg_precision": 0.621677922952449,
+                "avg_recall": 0.622
+            }
+        },
+        "2": {
+            "vote_prev": {
+                "count": 1,
+                "avg_f1": 0.6476614221617912,
+                "avg_accuracy": 0.653,
+                "avg_precision": 0.65679571583107,
+                "avg_recall": 0.653
+            },
+            "bag_prev": {
+                "count": 1,
+                "avg_f1": 0.6506188529193004,
+                "avg_accuracy": 0.656,
+                "avg_precision": 0.6604079019787041,
+                "avg_recall": 0.656
+            }
+        },
+        "3": {
+            "stack_prev": {
+                "count": 1,
+                "avg_f1": 0.6470309407246789,
+                "avg_accuracy": 0.652,
+                "avg_precision": 0.6562288964585534,
+                "avg_recall": 0.652
+            },
+            "vote_prev": {
+                "count": 1,
+                "avg_f1": 0.6505497727125138,
+                "avg_accuracy": 0.656,
+                "avg_precision": 0.6615036071245451,
+                "avg_recall": 0.656
+            }
+        }
+    }
+}

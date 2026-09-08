@@ -4,3 +4,29 @@ __pycache__/
 .streamlit/
 mlruns/
 *.log
+.venv/
+venv/
+.env
+*.pkl
+*.onnx
+
+# Artefatos gerados pelos workspaces (ver README "Artefatos gerados")
+MLine/exports/
+MLine/mlruns/
+sagemaker based/models/
+sagemaker based/mlruns/
+sagemaker based/data/
+Flexible Ensemble Pyramid/experiments/
+Flexible Ensemble Pyramid/mlruns/
+Flexible Ensemble Pyramid/__pycache__/
+
+# Resultados / memória persistente da pirâmide (regerados a cada run)
+Flexible Ensemble Pyramid/pyramid_results.csv
+Flexible Ensemble Pyramid/pyramid_run_details.json
+Flexible Ensemble Pyramid/pyramid_rl_knowledge.json
+Flexible Ensemble Pyramid/nas_knowledge.json
+Flexible Ensemble Pyramid/best_pyramid_model.pkl
+pyramid_results.csv
+pyramid_run_details.json
+pyramid_rl_knowledge.json
+nas_knowledge.json

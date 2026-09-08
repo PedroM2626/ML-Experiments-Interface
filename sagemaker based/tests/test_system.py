@@ -3,13 +3,43 @@ Automated tests for AutoML Studio.
 Validates configurations, data utilities, and UI helper logic.
 """
 import pytest
-import pandas as pd
-import numpy as np
+import importlib.util
+import os
+import sys
 from pathlib import Path
 
-from config import MODELS_DIR, DATA_DIR, APP_NAME, SUPPORTED_EXTENSIONS
-from src.data_utils import detect_column_type, detect_problem_type, profile_dataset
-from src.ui_utils import load_global_css
+STUDIO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, os.fspath(STUDIO_ROOT))
+import pandas as pd
+import numpy as np
+
+
+def _load_from_path(module_name: str, file_path: Path):
+    """Load a module by file path, bypassing the ambiguous `src` package name.
+
+    Both MLine/ and `sagemaker based/` have a top-level `src/` package, so a plain
+    `from src...` can resolve to the wrong project when the full suite runs together
+    (whichever `src` was imported first wins in sys.modules).
+    """
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_config = _load_from_path("automl_studio_config", STUDIO_ROOT / "config.py")
+_data_utils = _load_from_path("automl_studio_data_utils", STUDIO_ROOT / "src" / "data_utils.py")
+_ui_utils = _load_from_path("automl_studio_ui_utils", STUDIO_ROOT / "src" / "ui_utils.py")
+
+MODELS_DIR = _config.MODELS_DIR
+DATA_DIR = _config.DATA_DIR
+APP_NAME = _config.APP_NAME
+SUPPORTED_EXTENSIONS = _config.SUPPORTED_EXTENSIONS
+detect_column_type = _data_utils.detect_column_type
+detect_problem_type = _data_utils.detect_problem_type
+profile_dataset = _data_utils.profile_dataset
+load_global_css = _ui_utils.load_global_css
 
 def test_config_paths():
     """Verify core directories exist or were created."""
