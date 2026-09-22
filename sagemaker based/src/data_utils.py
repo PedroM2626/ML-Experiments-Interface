@@ -40,7 +40,7 @@ def detect_column_type(series: pd.Series) -> str:
         return "Binary"
 
     # Try datetime
-    if series.dtype == "object":
+    if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
         try:
             import warnings
             sample = series.dropna().head(50).astype(str)
@@ -63,7 +63,7 @@ def detect_column_type(series: pd.Series) -> str:
             return "Binary"
         return "Numeric"
 
-    if series.dtype == "object":
+    if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
         n_unique = series.nunique()
         n_total = len(series.dropna())
         if n_total == 0:
