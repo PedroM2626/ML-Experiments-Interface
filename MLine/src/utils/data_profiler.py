@@ -63,7 +63,11 @@ def _col_profiles(df, numeric_cols, categorical_cols, missing_pct) -> list:
 
 
 def _target_profile(series: pd.Series) -> Dict:
-    if series.dtype == object or str(series.dtype) == "category":
+    if (
+        pd.api.types.is_object_dtype(series)
+        or pd.api.types.is_string_dtype(series)
+        or str(series.dtype) == "category"
+    ):
         vc = series.value_counts()
         return {
             "type": "categorical",
@@ -83,7 +87,11 @@ def _target_profile(series: pd.Series) -> Dict:
 
 def infer_task_type(series: pd.Series, max_classes: int = 20) -> str:
     """Heuristically determine if regression or classification."""
-    if series.dtype == object or str(series.dtype) == "category":
+    if (
+        pd.api.types.is_object_dtype(series)
+        or pd.api.types.is_string_dtype(series)
+        or str(series.dtype) == "category"
+    ):
         return "classification"
     if series.nunique() <= max_classes:
         return "classification"
